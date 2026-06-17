@@ -1,0 +1,17 @@
+version: '3.8'
+
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: reposage-db
+    environment:
+      POSTGRES_DB: reposage
+      POSTGRES_USER: reposage
+      POSTGRES_PASSWORD: reposage_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+volumes:
+  pgdata:
