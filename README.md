@@ -1,4 +1,4 @@
-# RepoSage 🧠
+# RepoSage 
 
 **RepoSage** is a privacy-first, 100% local AI code assistant and code search engine built for engineering teams. It allows developers to index their proprietary repositories and ask complex questions without their code ever leaving their secure network. 
 
@@ -6,7 +6,7 @@ Say goodbye to scattered context and knowledge loss when team members switch pro
 
 ---
 
-## 🌟 Key Features
+##  Key Features
 
 * **100% Local Architecture:** Your code stays yours. Built with Ollama and pgvector, ensuring no data is ever sent to third-party LLM providers.
 * **Advanced Retrieval Pipelines:** Supports Vector, Lexical (full-text), and Hybrid searches using Reciprocal Rank Fusion (RRF).
@@ -35,7 +35,7 @@ Say goodbye to scattered context and knowledge loss when team members switch pro
 
 ---
 
-## 📁 Repository Structure
+##  Repository Structure
 
 ```
 RepoSage/
@@ -57,7 +57,7 @@ For a deep dive into how RepoSage works under the hood, check out the [Documenta
 
 ---
 
-## 🚀 Getting Started
+##  Getting Started
 
 ### Prerequisites
 * Docker and Docker Compose
@@ -100,6 +100,6 @@ ollama run mistral
 
 ---
 
-## 🛡️ License
+##  License
 
 This project is proprietary and intended for internal use unless specified otherwise.
