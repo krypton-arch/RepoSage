@@ -71,6 +71,8 @@ def upload_zip(request, project_id):
     }, status=status.HTTP_201_CREATED)
 
 
+import threading
+
 @api_view(['POST'])
 def trigger_ingestion(request, project_id):
     """Trigger the ingestion pipeline for a project.
@@ -109,12 +111,18 @@ def trigger_ingestion(request, project_id):
         job = IngestionJob.objects.create(project=project)
 
     try:
-        job = run_ingestion(project, job, resume=resume)
+        thread = threading.Thread(
+            target=run_ingestion,
+            args=(project, job, resume)
+        )
+        thread.daemon = True
+        thread.start()
+        
         serializer = IngestionJobSerializer(job)
         return Response(serializer.data, status=status.HTTP_200_OK)
     except Exception as e:
         return Response(
-            {'error': f'Ingestion failed: {str(e)}'},
+            {'error': f'Ingestion failed to start: {str(e)}'},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
 

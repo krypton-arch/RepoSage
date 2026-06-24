@@ -1,16 +1,17 @@
 # RepoSage 
 
-**RepoSage** is a privacy-first, 100% local AI code assistant and code search engine built for engineering teams. It allows developers to index their proprietary repositories and ask complex questions without their code ever leaving their secure network. 
+**RepoSage** is a specialized Source Code Retrieval-Augmented Generation (Code-RAG) Engine designed exclusively for strict, local-first environments. Operating entirely within air-gapped security networks, RepoSage allows engineering teams to semantically query their proprietary codebases without exposing intellectual property to third-party APIs.
 
-Say goodbye to scattered context and knowledge loss when team members switch projects or leave. RepoSage ensures your team’s knowledge remains queryable, grounded, and entirely local.
+Unlike generic knowledge management, wiki searchers, or task-tracking systems, RepoSage is purpose-built for code. It leverages deep Abstract Syntax Tree (AST) parsing, code-syntax semantics, and deterministic chunking strategies to understand the structural logic of repositories, firmly establishing it as a dedicated engineering tool rather than a generalized information retrieval system.
 
 ---
 
-##  Key Features
+## 🚀 Key Features
 
-* **100% Local Architecture:** Your code stays yours. Built with Ollama and pgvector, ensuring no data is ever sent to third-party LLM providers.
-* **Advanced Retrieval Pipelines:** Supports Vector, Lexical (full-text), and Hybrid searches using Reciprocal Rank Fusion (RRF).
-* **Cross-Encoder Reranking:** Ensures the most highly relevant code chunks are sent to the LLM for reasoning.
+* **Strict Air-Gapped Security:** Your code never leaves the network. Built around Ollama and pgvector to guarantee a 100% local, zero-telemetry architecture.
+* **Code-Syntax Semantic Understanding:** Focuses on code-specific retrieval through intelligent AST parsing, rather than generic text chunking, preserving the structural relationships between functions, classes, and dependencies.
+* **Advanced Retrieval Pipelines:** Implements Vector, Lexical (BM25), and Hybrid searches using Reciprocal Rank Fusion (RRF) for precise code discovery.
+* **Cross-Encoder Reranking:** Filters and reranks retrieved code chunks to ensure the LLM receives only the most highly relevant semantic context.
 * **Deep Observability:** Tracks pipeline execution times, LLM generation latency, context tokens used, and specific file line numbers for perfect answer attribution.
 * **Knowledge Drift Detection:** Tracks the specific parser, chunker, and embedding models used during ingestion to warn administrators when chunks become outdated.
 * **Built-in Evaluation Engine:** Write test cases for your codebase and automatically measure retrieval recall, precision, and latency regression over time.

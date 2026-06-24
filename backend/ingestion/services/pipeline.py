@@ -16,6 +16,7 @@ import time
 from pathlib import Path
 
 from django.conf import settings
+from django.db import transaction
 from django.utils import timezone
 
 from common.limits import enforce_limit
@@ -181,40 +182,41 @@ def run_ingestion(
                     continue
 
                 try:
-                    doc.status = SourceDocument.Status.PROCESSING
-                    doc.save()
+                    with transaction.atomic():
+                        doc.status = SourceDocument.Status.PROCESSING
+                        doc.save()
 
-                    # Read file content
-                    full_path = Path(upload_dir) / doc.file_path
-                    with open(full_path, "r", encoding="utf-8", errors="replace") as f:
-                        content = f.read()
+                        # Read file content
+                        full_path = Path(upload_dir) / doc.file_path
+                        with open(full_path, "r", encoding="utf-8", errors="replace") as f:
+                            content = f.read()
 
-                    # Parse
-                    sections = parse_file(doc.file_path, content, doc.language)
+                        # Parse
+                        sections = parse_file(doc.file_path, content, doc.language)
 
-                    # Chunk
-                    chunks = chunk_sections(
-                        sections=sections,
-                        file_type=doc.file_type,
-                        file_path=doc.file_path,
-                        language=doc.language,
-                        max_tokens=getattr(settings, "CHUNK_MAX_TOKENS", 500),
-                        overlap_tokens=getattr(settings, "CHUNK_OVERLAP_TOKENS", 50),
-                    )
+                        # Chunk
+                        chunks = chunk_sections(
+                            sections=sections,
+                            file_type=doc.file_type,
+                            file_path=doc.file_path,
+                            language=doc.language,
+                            max_tokens=getattr(settings, "CHUNK_MAX_TOKENS", 500),
+                            overlap_tokens=getattr(settings, "CHUNK_OVERLAP_TOKENS", 50),
+                        )
 
-                    for chunk in chunks:
-                        all_chunks_data.append((doc, chunk))
+                        for chunk in chunks:
+                            all_chunks_data.append((doc, chunk))
 
-                    # Stamp versions and mark indexed.
-                    _stamp_document_versions(doc, versions)
-                    doc.status = SourceDocument.Status.INDEXED
-                    doc.save()
+                        # Stamp versions and mark indexed.
+                        _stamp_document_versions(doc, versions)
+                        doc.status = SourceDocument.Status.INDEXED
+                        doc.save()
 
-                    job.processed_files += 1
+                        job.processed_files += 1
 
-                    # Checkpoint — record this document as completed.
-                    job.completed_file_ids.append(doc_id_str)
-                    job.save()
+                        # Checkpoint — record this document as completed.
+                        job.completed_file_ids.append(doc_id_str)
+                        job.save()
 
                 except Exception as e:
                     logger.error("Failed to process %s: %s", doc.file_path, e)
@@ -317,8 +319,9 @@ def run_ingestion(
                     )
                     chunk_objects.append(chunk_obj)
 
-                DocumentChunk.objects.bulk_create(chunk_objects, batch_size=100)
-                job.total_chunks_created = len(chunk_objects)
+                with transaction.atomic():
+                    DocumentChunk.objects.bulk_create(chunk_objects, batch_size=100)
+                    job.total_chunks_created = len(chunk_objects)
 
         # --------------------------------------------------------------
         # Finalise
