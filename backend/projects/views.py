@@ -89,7 +89,7 @@ class ProjectViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
 
     @action(detail=True, methods=['patch'], url_path='settings')
-    def settings(self, request, pk=None):
+    def project_settings(self, request, pk=None):
         """PATCH retrieval and access-control settings for a project.
 
         Accepts partial updates for: retrieval_mode, retrieval_top_k,
