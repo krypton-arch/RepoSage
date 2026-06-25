@@ -7,10 +7,12 @@ import {
   projects,
   ingestion,
   query,
+  evaluation,
   formatBytes,
   formatDuration,
   formatDate,
   formatMs,
+  formatPercent,
   timeAgo,
   type Project,
   type ProjectStats,
@@ -23,6 +25,8 @@ import {
   type QueryResult,
   type RetrievalMode,
   type Visibility,
+  type EvaluationCase,
+  type EvaluationRun,
 } from '@/lib/api';
 
 /* ---- helpers ---- */
@@ -83,7 +87,7 @@ const ACCEPTED_EXTENSIONS: Record<string, string[]> = {
   'application/toml': ['.toml'],
 };
 
-type TabId = 'files' | 'query' | 'settings';
+type TabId = 'files' | 'query' | 'evaluation' | 'settings';
 
 /* ---- Component ---- */
 
@@ -132,6 +136,20 @@ export default function ProjectDetailPage({
   const [settingsForm, setSettingsForm] = useState<ProjectSettings>({});
   const [savingSettings, setSavingSettings] = useState(false);
   const [settingsStatus, setSettingsStatus] = useState<string | null>(null);
+
+  // Staleness state
+  const [staleness, setStaleness] = useState<StalenessReport | null>(null);
+  const [stalenessLoading, setStalenessLoading] = useState(false);
+
+  // Evaluation tab state
+  const [evalCases, setEvalCases] = useState<EvaluationCase[]>([]);
+  const [evalCasesLoading, setEvalCasesLoading] = useState(false);
+  const [evalRuns, setEvalRuns] = useState<Record<string, EvaluationRun[]>>({});
+  const [expandedCaseId, setExpandedCaseId] = useState<string | null>(null);
+  const [evalRunning, setEvalRunning] = useState(false);
+  const [evalStatus, setEvalStatus] = useState<string | null>(null);
+  const [newCaseForm, setNewCaseForm] = useState({ question: '', expected_answer_traits: '' });
+  const [creatingCase, setCreatingCase] = useState(false);
 
   /* ---- Data fetching ---- */
 
@@ -182,7 +200,84 @@ export default function ProjectDetailPage({
     if (activeTab === 'query') {
       fetchQueries();
     }
+    if (activeTab === 'evaluation') {
+      fetchEvalCases();
+    }
+    if (activeTab === 'settings') {
+      fetchStaleness();
+    }
   }, [activeTab, fetchQueries]);
+
+  /* ---- Load staleness ---- */
+  const fetchStaleness = async () => {
+    setStalenessLoading(true);
+    try {
+      const report = await projects.staleness(id);
+      setStaleness(report);
+    } catch {
+      setStaleness(null);
+    } finally {
+      setStalenessLoading(false);
+    }
+  };
+
+  /* ---- Evaluation helpers ---- */
+  const fetchEvalCases = async () => {
+    setEvalCasesLoading(true);
+    try {
+      const cases = await evaluation.listCases(id);
+      setEvalCases(cases);
+    } catch {
+      setEvalCases([]);
+    } finally {
+      setEvalCasesLoading(false);
+    }
+  };
+
+  const loadEvalRuns = async (caseId: string) => {
+    if (expandedCaseId === caseId) {
+      setExpandedCaseId(null);
+      return;
+    }
+    setExpandedCaseId(caseId);
+    try {
+      const runs = await evaluation.listRuns(id, caseId);
+      setEvalRuns((prev) => ({ ...prev, [caseId]: runs }));
+    } catch {
+      setEvalRuns((prev) => ({ ...prev, [caseId]: [] }));
+    }
+  };
+
+  const handleRunEvaluation = async () => {
+    setEvalRunning(true);
+    setEvalStatus(null);
+    try {
+      const result = await evaluation.runAll(id);
+      setEvalStatus(`Evaluation complete — ${(result.results || []).length} test(s) executed.`);
+      fetchEvalCases();
+    } catch (err) {
+      setEvalStatus(`Error: ${err instanceof Error ? err.message : 'Evaluation failed'}`);
+    } finally {
+      setEvalRunning(false);
+    }
+  };
+
+  const handleCreateCase = async () => {
+    if (!newCaseForm.question.trim()) return;
+    setCreatingCase(true);
+    try {
+      await evaluation.createCase(id, {
+        question: newCaseForm.question.trim(),
+        expected_answer_traits: newCaseForm.expected_answer_traits.trim(),
+      });
+      setNewCaseForm({ question: '', expected_answer_traits: '' });
+      fetchEvalCases();
+    } catch {
+      // Error handling via UI
+    } finally {
+      setCreatingCase(false);
+    }
+  };
 
   /* ---- Load query detail ---- */
   const loadQueryDetail = async (queryId: string) => {
@@ -367,6 +462,7 @@ export default function ProjectDetailPage({
   const TABS: { id: TabId; label: string; icon: string }[] = [
     { id: 'files', label: 'Files', icon: 'folder_open' },
     { id: 'query', label: 'Query', icon: 'chat' },
+    { id: 'evaluation', label: 'Evaluation', icon: 'science' },
     { id: 'settings', label: 'Settings', icon: 'tune' },
   ];
 
@@ -860,102 +956,273 @@ export default function ProjectDetailPage({
         </>
       )}
 
-      {/* -------- SETTINGS TAB -------- */}
-      {activeTab === 'settings' && (
-        <section>
-          <h2 className="section-title">Project Settings</h2>
-          <div className="card">
-            <div className="flex flex-col gap-lg">
-              {/* Retrieval Mode */}
-              <div className="flex flex-col gap-xs">
-                <label className="text-label-caps">Retrieval Mode</label>
-                <select
-                  className="input"
-                  value={settingsForm.retrieval_mode || 'vector'}
-                  onChange={(e) => setSettingsForm((prev) => ({ ...prev, retrieval_mode: e.target.value as RetrievalMode }))}
-                >
-                  <option value="vector">Vector (Semantic)</option>
-                  <option value="hybrid">Hybrid (Semantic + Lexical)</option>
-                  <option value="lexical">Lexical (Full-Text)</option>
-                </select>
-                <p className="text-body-sm text-muted">
-                  Choose how retrieved chunks are searched. Hybrid combines vector similarity with full-text keyword matching using Reciprocal Rank Fusion.
-                </p>
-              </div>
-
-              {/* Top K */}
-              <div className="flex flex-col gap-xs">
-                <label className="text-label-caps">Top K (Chunks to Retrieve)</label>
-                <input
-                  type="number"
-                  className="input"
-                  value={settingsForm.retrieval_top_k ?? 10}
-                  min={1}
-                  max={50}
-                  onChange={(e) => setSettingsForm((prev) => ({ ...prev, retrieval_top_k: parseInt(e.target.value) || 10 }))}
-                />
-                <p className="text-body-sm text-muted">
-                  Number of source chunks retrieved for each query (1–50).
-                </p>
-              </div>
-
-              {/* Max Context Tokens */}
-              <div className="flex flex-col gap-xs">
-                <label className="text-label-caps">Max Context Tokens</label>
-                <input
-                  type="number"
-                  className="input"
-                  value={settingsForm.max_context_tokens ?? 3000}
-                  min={500}
-                  max={16000}
-                  step={500}
-                  onChange={(e) => setSettingsForm((prev) => ({ ...prev, max_context_tokens: parseInt(e.target.value) || 3000 }))}
-                />
-                <p className="text-body-sm text-muted">
-                  Maximum token budget for context assembly in the LLM prompt (500–16,000).
-                </p>
-              </div>
-
-              {/* Visibility */}
-              <div className="flex flex-col gap-xs">
-                <label className="text-label-caps">Visibility</label>
-                <select
-                  className="input"
-                  value={settingsForm.visibility || 'private'}
-                  onChange={(e) => setSettingsForm((prev) => ({ ...prev, visibility: e.target.value as Visibility }))}
-                >
-                  <option value="private">Private</option>
-                  <option value="shared">Shared</option>
-                  <option value="public">Public</option>
-                </select>
-                <p className="text-body-sm text-muted">
-                  Controls who can access this project and its search results.
-                </p>
-              </div>
-
-              {/* Save Button */}
-              <div className="flex items-center gap-md">
+      {/* -------- EVALUATION TAB -------- */}
+      {activeTab === 'evaluation' && (
+        <>
+          {/* Create Test Case */}
+          <section>
+            <h2 className="section-title">New Test Case</h2>
+            <div className="card">
+              <div className="flex flex-col gap-md">
+                <div className="flex flex-col gap-xs">
+                  <label className="text-label-caps">Question</label>
+                  <input
+                    type="text"
+                    className="input"
+                    placeholder="What does the authentication middleware do?"
+                    value={newCaseForm.question}
+                    onChange={(e) => setNewCaseForm((prev) => ({ ...prev, question: e.target.value }))}
+                    disabled={creatingCase}
+                  />
+                </div>
+                <div className="flex flex-col gap-xs">
+                  <label className="text-label-caps">Expected Answer Traits</label>
+                  <textarea
+                    className="input"
+                    placeholder="Should mention JWT validation, token expiry, and role-based access control…"
+                    value={newCaseForm.expected_answer_traits}
+                    onChange={(e) => setNewCaseForm((prev) => ({ ...prev, expected_answer_traits: e.target.value }))}
+                    disabled={creatingCase}
+                    rows={2}
+                    style={{ resize: 'vertical' }}
+                  />
+                </div>
                 <button
                   className="btn btn-primary"
-                  onClick={handleSaveSettings}
-                  disabled={savingSettings}
+                  onClick={handleCreateCase}
+                  disabled={creatingCase || !newCaseForm.question.trim()}
+                  style={{ alignSelf: 'flex-start' }}
                 >
-                  <span className="material-symbols-outlined">save</span>
-                  {savingSettings ? 'Saving…' : 'Save Settings'}
+                  <span className="material-symbols-outlined">add</span>
+                  {creatingCase ? 'Creating…' : 'Add Test Case'}
                 </button>
-                {settingsStatus && (
-                  <span
-                    className={`text-body-sm ${
-                      settingsStatus.startsWith('Error') ? 'text-error' : 'text-secondary'
-                    }`}
-                  >
-                    {settingsStatus}
-                  </span>
-                )}
               </div>
             </div>
-          </div>
-        </section>
+          </section>
+
+          {/* Run All Evaluations */}
+          <section>
+            <div className="flex items-center justify-between mb-md">
+              <h2 className="section-title" style={{ margin: 0 }}>Test Cases</h2>
+              <div className="flex items-center gap-md">
+                {evalStatus && (
+                  <span className={`text-body-sm ${evalStatus.startsWith('Error') ? 'text-error' : 'text-secondary'}`}>
+                    {evalStatus}
+                  </span>
+                )}
+                <button
+                  className="btn btn-primary"
+                  onClick={handleRunEvaluation}
+                  disabled={evalRunning || evalCases.length === 0}
+                >
+                  <span className="material-symbols-outlined">play_arrow</span>
+                  {evalRunning ? 'Running…' : 'Run All Tests'}
+                </button>
+              </div>
+            </div>
+
+            <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+              {evalCasesLoading ? (
+                <div className="flex flex-col gap-sm" style={{ padding: 'var(--space-lg)' }}>
+                  {[1, 2, 3].map((i) => (
+                    <div key={i} className="skeleton" style={{ height: 48 }} />
+                  ))}
+                </div>
+              ) : evalCases.length === 0 ? (
+                <div className="empty-state" style={{ padding: 'var(--space-2xl)' }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: 40, color: 'var(--outline)' }}>
+                    science
+                  </span>
+                  <p className="text-body-md text-muted mt-sm">No evaluation test cases yet. Add one above!</p>
+                </div>
+              ) : (
+                <div className="table-container">
+                  <table className="table">
+                    <thead>
+                      <tr>
+                        <th style={{ width: 24 }} />
+                        <th>Question</th>
+                        <th>Expected Traits</th>
+                        <th>Tags</th>
+                        <th>Created</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {evalCases.map((ec) => {
+                        const isExp = expandedCaseId === ec.id;
+                        const runs = evalRuns[ec.id] || [];
+                        return (
+                          <EvalCaseRow
+                            key={ec.id}
+                            evalCase={ec}
+                            isExpanded={isExp}
+                            onToggle={() => loadEvalRuns(ec.id)}
+                            runs={runs}
+                          />
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </section>
+        </>
+      )}
+
+      {/* -------- SETTINGS TAB -------- */}
+      {activeTab === 'settings' && (
+        <>
+          {/* Index Staleness Section */}
+          <section>
+            <h2 className="section-title">
+              <span className="material-symbols-outlined" style={{ fontSize: 18, verticalAlign: 'middle', marginRight: 4 }}>update</span>
+              Index Health
+            </h2>
+            <div className="card">
+              {stalenessLoading ? (
+                <div className="flex flex-col gap-sm">
+                  <div className="skeleton" style={{ height: 20, width: '60%' }} />
+                  <div className="skeleton" style={{ height: 14, width: '40%' }} />
+                </div>
+              ) : staleness ? (
+                <div className="flex flex-col gap-md">
+                  <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))' }}>
+                    <div className="stat-card" style={{ padding: 'var(--space-sm) var(--space-md)' }}>
+                      <div className="stat-card-label">Stale Chunks</div>
+                      <div className="stat-card-value" style={{ fontSize: 20, color: staleness.stale_chunks > 0 ? 'var(--tertiary)' : 'var(--accent-emerald)' }}>
+                        {staleness.stale_chunks}/{staleness.total_chunks}
+                      </div>
+                    </div>
+                    <div className="stat-card" style={{ padding: 'var(--space-sm) var(--space-md)' }}>
+                      <div className="stat-card-label">Stale Documents</div>
+                      <div className="stat-card-value" style={{ fontSize: 20, color: staleness.stale_documents > 0 ? 'var(--tertiary)' : 'var(--accent-emerald)' }}>
+                        {staleness.stale_documents}/{staleness.total_documents}
+                      </div>
+                    </div>
+                    <div className="stat-card" style={{ padding: 'var(--space-sm) var(--space-md)' }}>
+                      <div className="stat-card-label">Staleness</div>
+                      <div className="stat-card-value" style={{ fontSize: 20, color: staleness.staleness_ratio > 0 ? 'var(--tertiary)' : 'var(--accent-emerald)' }}>
+                        {Math.round(staleness.staleness_ratio * 100)}%
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex gap-lg" style={{ borderTop: '1px solid var(--outline-variant)', paddingTop: 'var(--space-md)' }}>
+                    <span className="text-body-sm text-muted">Parser: <strong>{staleness.current_parser_version}</strong></span>
+                    <span className="text-body-sm text-muted">Chunker: <strong>{staleness.current_chunker_version}</strong></span>
+                    <span className="text-body-sm text-muted">Embedding: <strong>{staleness.current_embedding_model}</strong></span>
+                  </div>
+                  {staleness.staleness_ratio > 0 && (
+                    <div style={{ padding: 'var(--space-sm) var(--space-md)', borderRadius: 'var(--radius-md)', background: 'rgba(255, 183, 131, 0.08)', border: '1px solid rgba(255, 183, 131, 0.2)' }}>
+                      <p className="text-body-sm" style={{ color: 'var(--tertiary)' }}>
+                        <span className="material-symbols-outlined" style={{ fontSize: 16, verticalAlign: 'middle', marginRight: 4 }}>warning</span>
+                        Some chunks were created with older pipeline versions. Re-index to update them.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <p className="text-body-sm text-muted">Unable to load staleness data.</p>
+              )}
+            </div>
+          </section>
+
+          {/* Retrieval Settings Section */}
+          <section>
+            <h2 className="section-title">Retrieval Configuration</h2>
+            <div className="card">
+              <div className="flex flex-col gap-lg">
+                {/* Retrieval Mode */}
+                <div className="flex flex-col gap-xs">
+                  <label className="text-label-caps">Retrieval Mode</label>
+                  <select
+                    className="input"
+                    value={settingsForm.retrieval_mode || 'vector'}
+                    onChange={(e) => setSettingsForm((prev) => ({ ...prev, retrieval_mode: e.target.value as RetrievalMode }))}
+                  >
+                    <option value="vector">Vector (Semantic)</option>
+                    <option value="hybrid">Hybrid (Semantic + Lexical)</option>
+                    <option value="lexical">Lexical (Full-Text)</option>
+                  </select>
+                  <p className="text-body-sm text-muted">
+                    Choose how retrieved chunks are searched. Hybrid combines vector similarity with full-text keyword matching using Reciprocal Rank Fusion.
+                  </p>
+                </div>
+
+                {/* Top K */}
+                <div className="flex flex-col gap-xs">
+                  <label className="text-label-caps">Top K (Chunks to Retrieve)</label>
+                  <input
+                    type="number"
+                    className="input"
+                    value={settingsForm.retrieval_top_k ?? 10}
+                    min={1}
+                    max={50}
+                    onChange={(e) => setSettingsForm((prev) => ({ ...prev, retrieval_top_k: parseInt(e.target.value) || 10 }))}
+                  />
+                  <p className="text-body-sm text-muted">
+                    Number of source chunks retrieved for each query (1–50).
+                  </p>
+                </div>
+
+                {/* Max Context Tokens */}
+                <div className="flex flex-col gap-xs">
+                  <label className="text-label-caps">Max Context Tokens</label>
+                  <input
+                    type="number"
+                    className="input"
+                    value={settingsForm.max_context_tokens ?? 3000}
+                    min={500}
+                    max={16000}
+                    step={500}
+                    onChange={(e) => setSettingsForm((prev) => ({ ...prev, max_context_tokens: parseInt(e.target.value) || 3000 }))}
+                  />
+                  <p className="text-body-sm text-muted">
+                    Maximum token budget for context assembly in the LLM prompt (500–16,000).
+                  </p>
+                </div>
+
+                {/* Visibility */}
+                <div className="flex flex-col gap-xs">
+                  <label className="text-label-caps">Visibility</label>
+                  <select
+                    className="input"
+                    value={settingsForm.visibility || 'private'}
+                    onChange={(e) => setSettingsForm((prev) => ({ ...prev, visibility: e.target.value as Visibility }))}
+                  >
+                    <option value="private">Private</option>
+                    <option value="shared">Shared</option>
+                    <option value="public">Public</option>
+                  </select>
+                  <p className="text-body-sm text-muted">
+                    Controls who can access this project and its search results.
+                  </p>
+                </div>
+
+                {/* Save Button */}
+                <div className="flex items-center gap-md">
+                  <button
+                    className="btn btn-primary"
+                    onClick={handleSaveSettings}
+                    disabled={savingSettings}
+                  >
+                    <span className="material-symbols-outlined">save</span>
+                    {savingSettings ? 'Saving…' : 'Save Settings'}
+                  </button>
+                  {settingsStatus && (
+                    <span
+                      className={`text-body-sm ${
+                        settingsStatus.startsWith('Error') ? 'text-error' : 'text-secondary'
+                      }`}
+                    >
+                      {settingsStatus}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+          </section>
+        </>
       )}
     </div>
     </main>
@@ -1060,6 +1327,125 @@ function DocRow({
                           ? chunk.content.slice(0, 150) + '…'
                           : chunk.content}
                       </pre>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </td>
+        </tr>
+      )}
+    </>
+  );
+}
+
+/* ---- Evaluation Case Row with expandable runs ---- */
+
+function EvalCaseRow({
+  evalCase,
+  isExpanded,
+  onToggle,
+  runs,
+}: {
+  evalCase: EvaluationCase;
+  isExpanded: boolean;
+  onToggle: () => void;
+  runs: EvaluationRun[];
+}) {
+  return (
+    <>
+      <tr onClick={onToggle} style={{ cursor: 'pointer', background: isExpanded ? 'var(--surface-container)' : undefined }}>
+        <td>
+          <span
+            className="material-symbols-outlined"
+            style={{
+              fontSize: 18,
+              color: 'var(--on-surface-variant)',
+              transition: 'transform var(--transition-fast)',
+              transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)',
+            }}
+          >
+            chevron_right
+          </span>
+        </td>
+        <td style={{ maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {evalCase.question}
+        </td>
+        <td className="text-body-sm text-muted" style={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {evalCase.expected_answer_traits || '—'}
+        </td>
+        <td>
+          {evalCase.tags && evalCase.tags.length > 0 ? (
+            <div className="flex items-center gap-xs">
+              {evalCase.tags.map((tag) => (
+                <span key={tag} className="badge badge-text">{tag}</span>
+              ))}
+            </div>
+          ) : (
+            <span className="text-muted">—</span>
+          )}
+        </td>
+        <td className="text-muted">{timeAgo(evalCase.created_at)}</td>
+      </tr>
+      {isExpanded && (
+        <tr>
+          <td colSpan={5} style={{ padding: 0, background: 'var(--surface-container-lowest)' }}>
+            <div style={{ padding: 'var(--space-md) var(--space-lg)' }}>
+              {runs.length === 0 ? (
+                <p className="text-body-sm text-muted">No evaluation runs yet. Click &quot;Run All Tests&quot; above.</p>
+              ) : (
+                <div className="flex flex-col gap-sm">
+                  {runs.map((run) => (
+                    <div
+                      key={run.id}
+                      className="chunk-card"
+                      style={{ padding: 'var(--space-md)' }}
+                    >
+                      <div className="flex items-center justify-between mb-sm">
+                        <div className="flex items-center gap-sm">
+                          <span className={`badge ${run.status === 'completed' ? 'badge-indexed' : run.status === 'failed' ? 'badge-failed' : 'badge-pending'}`}>
+                            {run.status}
+                          </span>
+                          <span className="text-body-sm text-muted">{timeAgo(run.created_at)}</span>
+                        </div>
+                        <div className="flex items-center gap-md">
+                          {run.retrieval_precision !== null && (
+                            <span className="text-body-sm">
+                              Precision: <strong>{formatPercent(run.retrieval_precision)}</strong>
+                            </span>
+                          )}
+                          {run.retrieval_latency_ms !== null && (
+                            <span className="text-body-sm text-muted">
+                              {formatMs(run.retrieval_latency_ms)}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 'var(--space-sm)' }}>
+                        <div style={{ padding: 'var(--space-xs)' }}>
+                          <div className="text-label-caps text-muted" style={{ fontSize: 10 }}>Groundedness</div>
+                          <div className="text-body-sm">{run.groundedness_rating || '—'}</div>
+                        </div>
+                        <div style={{ padding: 'var(--space-xs)' }}>
+                          <div className="text-label-caps text-muted" style={{ fontSize: 10 }}>Usefulness</div>
+                          <div className="text-body-sm">{run.usefulness_rating || '—'}</div>
+                        </div>
+                        <div style={{ padding: 'var(--space-xs)' }}>
+                          <div className="text-label-caps text-muted" style={{ fontSize: 10 }}>Context Tokens</div>
+                          <div className="text-body-sm">{run.context_tokens_used ?? '—'}</div>
+                        </div>
+                        <div style={{ padding: 'var(--space-xs)' }}>
+                          <div className="text-label-caps text-muted" style={{ fontSize: 10 }}>Duration</div>
+                          <div className="text-body-sm">{formatDuration(run.duration_seconds)}</div>
+                        </div>
+                      </div>
+                      {run.generated_answer && (
+                        <div style={{ marginTop: 'var(--space-sm)', padding: 'var(--space-sm)', borderRadius: 'var(--radius-sm)', background: 'var(--surface-container)' }}>
+                          <p className="text-body-sm" style={{ whiteSpace: 'pre-wrap', maxHeight: 80, overflow: 'hidden' }}>
+                            {run.generated_answer.length > 200 ? run.generated_answer.slice(0, 200) + '…' : run.generated_answer}
+                          </p>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
