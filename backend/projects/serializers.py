@@ -69,3 +69,18 @@ class ProjectStatsSerializer(serializers.Serializer):
     total_eval_cases = serializers.IntegerField()
     last_ingestion_job = serializers.DictField(allow_null=True)
     avg_chunk_tokens = serializers.FloatField()
+
+
+from .models import GlobalSettings
+
+class GlobalSettingsSerializer(serializers.ModelSerializer):
+    """Serializer for global system settings."""
+    class Meta:
+        model = GlobalSettings
+        fields = [
+            'theme',
+            'telemetry_enabled',
+            'ollama_endpoint',
+            'max_concurrent_jobs',
+            'vector_retention_days'
+        ]

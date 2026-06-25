@@ -75,3 +75,29 @@ class Project(models.Model):
 
     def __str__(self):
         return self.name
+
+
+class GlobalSettings(models.Model):
+    """Singleton model for system-wide configuration."""
+    
+    theme = models.CharField(max_length=20, default='system', choices=[
+        ('system', 'System Default'),
+        ('light', 'Light'),
+        ('dark', 'Dark'),
+    ])
+    telemetry_enabled = models.BooleanField(default=False)
+    ollama_endpoint = models.CharField(max_length=255, default='http://localhost:11434')
+    max_concurrent_jobs = models.IntegerField(default=4)
+    vector_retention_days = models.IntegerField(default=30)
+    
+    def save(self, *args, **kwargs):
+        self.pk = 1
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def load(cls):
+        obj, created = cls.objects.get_or_create(pk=1)
+        return obj
+
+    class Meta:
+        verbose_name_plural = "Global Settings"

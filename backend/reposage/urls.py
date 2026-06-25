@@ -10,4 +10,5 @@ urlpatterns = [
     path('api/query/', include('query.urls')),
     path('api/evaluation/', include('evaluation.urls')),
     path('api/dashboard/', include('projects.dashboard_urls')),
+    path('api/settings/', include('projects.settings_urls')),
 ]

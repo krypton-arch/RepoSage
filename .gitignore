@@ -3,9 +3,16 @@ __pycache__/
 *.py[cod]
 *$py.class
 
-# Django media and static
+# Django
 /backend/media/
 /backend/static/
+/backend/db.sqlite3
+*.sqlite3
+
+# Python virtual environment
+venv/
+.venv/
+env/
 
 # Local configuration files
 .env
@@ -20,8 +27,21 @@ out/
 /frontend/node_modules/
 /frontend/.next/
 
+# Prototype / standalone HTML files
+frontend/landing_screen.html
+frontend/login_screen.html
+
 # IDEs and OS files
 .vscode/
 .idea/
 .DS_Store
 Thumbs.db
+*.swp
+*.swo
+
+# Logs
+*.log
+npm-debug.log*
+
+# Vector store data (local dev only)
+/backend/vector_store/

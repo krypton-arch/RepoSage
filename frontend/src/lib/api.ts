@@ -1,6 +1,6 @@
 /* API client for RepoSage backend */
 
-const API_BASE = '/api';
+const API_BASE = 'http://localhost:8000/api';
 
 interface FetchOptions extends RequestInit {
   params?: Record<string, string>;
@@ -41,11 +41,12 @@ async function request<T>(endpoint: string, options: FetchOptions = {}): Promise
   });
 
   if (!response.ok) {
-    let detail;
+    const text = await response.text();
+    let detail: unknown;
     try {
-      detail = await response.json();
+      detail = JSON.parse(text);
     } catch {
-      detail = await response.text();
+      detail = text;
     }
     throw new ApiError(response.status, detail);
   }
@@ -102,12 +103,15 @@ export interface ProjectStats {
 export interface StalenessReport {
   stale_documents: number;
   stale_chunks: number;
-  total_documents: number;
+  total_documents?: number;
   total_chunks: number;
-  current_parser_version: string;
-  current_chunker_version: string;
-  current_embedding_model: string;
-  staleness_ratio: number;
+  current_versions: {
+    parser_version: string;
+    chunker_version: string;
+    embedding_version: string;
+    embedding_model: string;
+  };
+  stale_versions: unknown[];
 }
 
 export interface DashboardStats {
@@ -396,8 +400,10 @@ export interface EvaluationRunComparison {
 }
 
 export const evaluation = {
-  listCases: (projectId: string) =>
-    request<EvaluationCase[]>(`/evaluation/projects/${projectId}/evaluation/cases/`),
+  listCases: async (projectId: string) => {
+    const res = await request<{ results: EvaluationCase[] }>(`/evaluation/projects/${projectId}/evaluation/cases/`);
+    return res.results;
+  },
   createCase: (projectId: string, data: Partial<EvaluationCase>) =>
     request<EvaluationCase>(`/evaluation/projects/${projectId}/evaluation/cases/`, {
       method: 'POST',
@@ -415,6 +421,25 @@ export const evaluation = {
       `/evaluation/projects/${projectId}/evaluation/compare/`,
       { params: { run_a: runAId, run_b: runBId } }
     ),
+};
+
+/* ==== System Settings ==== */
+
+export interface SystemSettings {
+  theme: string;
+  telemetry_enabled: boolean;
+  ollama_endpoint: string;
+  max_concurrent_jobs: number;
+  vector_retention_days: number;
+}
+
+export const system = {
+  getSettings: () => request<SystemSettings>('/settings/'),
+  updateSettings: (data: Partial<SystemSettings>) =>
+    request<SystemSettings>('/settings/', {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
 };
 
 /* ==== Utilities ==== */

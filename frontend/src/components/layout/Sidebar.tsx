@@ -6,8 +6,6 @@ import { usePathname } from 'next/navigation';
 const navLinks = [
   { label: 'Dashboard', icon: 'dashboard', href: '/' },
   { label: 'Projects', icon: 'folder_open', href: '/projects' },
-  { label: 'Intelligence Hub', icon: 'psychology', href: '/query' },
-  { label: 'Evaluation', icon: 'analytics', href: '/evaluation' },
 ];
 
 export default function Sidebar() {

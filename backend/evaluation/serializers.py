@@ -16,7 +16,7 @@ class EvaluationCaseSerializer(serializers.ModelSerializer):
             'benchmark_suite', 'benchmark_version', 'tags',
             'created_at', 'updated_at',
         ]
-        read_only_fields = ['id', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'project', 'created_at', 'updated_at']
 
 
 class EvaluationRunSerializer(serializers.ModelSerializer):
