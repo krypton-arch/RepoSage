@@ -5,13 +5,73 @@ services:
     image: pgvector/pgvector:pg16
     container_name: reposage-db
     environment:
-      POSTGRES_DB: reposage
-      POSTGRES_USER: reposage
-      POSTGRES_PASSWORD: reposage_dev
-    ports:
-      - "5432:5432"
+      POSTGRES_DB: ${DB_NAME:-reposage}
+      POSTGRES_USER: ${DB_USER:-reposage}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-reposage_dev}
     volumes:
       - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: reposage-backend
+    depends_on:
+      - db
+    environment:
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_NAME=${DB_NAME:-reposage}
+      - DB_USER=${DB_USER:-reposage}
+      - DB_PASSWORD=${DB_PASSWORD:-reposage_dev}
+      - DJANGO_SECRET_KEY=${DJANGO_SECRET_KEY:-dev-secret-key-change-in-production}
+      - DJANGO_DEBUG=${DJANGO_DEBUG:-False}
+      - DJANGO_ALLOWED_HOSTS=${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1,backend,nginx}
+      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost,http://127.0.0.1}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      - GENERATION_MODEL=${GENERATION_MODEL:-mistral}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-all-MiniLM-L6-v2}
+    volumes:
+      - static_volume:/app/staticfiles
+      - media_volume:/app/media
+      - huggingface_cache:/root/.cache/huggingface
+    # Note: we don't map ports here because Nginx will proxy to it on port 8000 internally.
+    # If you want to access the API directly on the host, uncomment the below lines:
+    # ports:
+    #   - "8000:8000"
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: reposage-frontend
+    depends_on:
+      - backend
+    environment:
+      - NEXT_PUBLIC_API_URL=/api
+      - BACKEND_URL=http://backend:8000
+      - NEXTAUTH_URL=http://localhost
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET:-reposage-airgapped-super-secret-key-1234}
+    # Note: we don't map ports here because Nginx will proxy to it on port 3000 internally.
+
+  nginx:
+    build:
+      context: ./nginx
+      dockerfile: Dockerfile
+    container_name: reposage-nginx
+    depends_on:
+      - backend
+      - frontend
+    ports:
+      - "80:80"
+    volumes:
+      - static_volume:/var/www/static
+      - media_volume:/var/www/media
 
 volumes:
   pgdata:
+  static_volume:
+  media_volume:
+  huggingface_cache:

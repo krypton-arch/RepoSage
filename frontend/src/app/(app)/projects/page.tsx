@@ -151,8 +151,7 @@ function ProjectsPageContent() {
             {projectList.map((project) => (
               <FadeUpItem key={project.id}>
                 <HoverCard
-                  className="card"
-                  style={{ display: 'flex', flexDirection: 'column', height: '100%' }}
+                  className="card flex flex-col h-full"
                   onClick={() => router.push(`/projects/${project.id}`)}
                 >
                   <div className="flex items-center justify-between mb-sm">

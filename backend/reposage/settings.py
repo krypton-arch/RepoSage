@@ -97,15 +97,21 @@ USE_TZ = True
 
 # Static files
 STATIC_URL = 'static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+
 
 # Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # CORS
-CORS_ALLOWED_ORIGINS = [
-    'http://localhost:3000',
-    'http://127.0.0.1:3000',
-]
+cors_origins_env = os.getenv('CORS_ALLOWED_ORIGINS')
+if cors_origins_env:
+    CORS_ALLOWED_ORIGINS = cors_origins_env.split(',')
+else:
+    CORS_ALLOWED_ORIGINS = [
+        'http://localhost:3000',
+        'http://127.0.0.1:3000',
+    ]
 
 # REST Framework
 REST_FRAMEWORK = {

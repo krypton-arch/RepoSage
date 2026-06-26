@@ -13,7 +13,8 @@ export const authOptions: NextAuthOptions = {
         if (!credentials?.username || !credentials?.password) return null;
 
         try {
-          const res = await fetch("http://127.0.0.1:8000/api/auth/token/", {
+          const backendUrl = process.env.BACKEND_URL || "http://127.0.0.1:8000";
+          const res = await fetch(`${backendUrl}/api/auth/token/`, {
             method: 'POST',
             body: JSON.stringify({
               username: credentials.username,

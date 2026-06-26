@@ -45,3 +45,5 @@ npm-debug.log*
 
 # Vector store data (local dev only)
 /backend/vector_store/
+huggingface_backup/
+temp_portfolio_repo/

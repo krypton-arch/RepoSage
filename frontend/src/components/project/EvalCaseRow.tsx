@@ -167,10 +167,10 @@ export default function EvalCaseRow({
                             </div>
                           )}
                           
-                          {run.notes && (
+                          {run.reviewer_notes && (
                             <div className="mt-4 p-4 bg-[var(--surface-container)]/20 border-l-4 border-[var(--secondary)] font-body-sm text-[var(--on-surface)]">
                               <div className="text-[10px] font-label-caps tracking-widest text-[var(--secondary)] mb-1">EVALUATOR NOTES</div>
-                              {run.notes}
+                              {run.reviewer_notes}
                             </div>
                           )}
                         </div>

@@ -1,9 +1,7 @@
 /* API client for RepoSage backend */
 
 import { getSession } from 'next-auth/react';
-
-const API_BASE = 'http://localhost:8000/api';
-
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || '/api';
 interface FetchOptions extends RequestInit {
   params?: Record<string, string>;
 }

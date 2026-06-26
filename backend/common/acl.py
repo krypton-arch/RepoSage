@@ -38,7 +38,7 @@ def get_visible_chunks_queryset(project_id: str, user_id: str = 'system') -> Que
     from projects.models import Project
     try:
         project = Project.objects.get(id=project_id)
-        if project.owner_id != user_id and project.visibility == 'private':
+        if user_id != 'system' and project.owner_id != user_id and project.visibility == 'private':
             return DocumentChunk.objects.none()
     except Project.DoesNotExist:
         return DocumentChunk.objects.none()
