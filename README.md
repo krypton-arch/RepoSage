@@ -6,7 +6,7 @@ Unlike generic knowledge management, wiki searchers, or task-tracking systems, R
 
 ---
 
-## 🚀 Key Features
+## Key Features
 
 * **Strict Air-Gapped Security:** Your code never leaves the network. Built around Ollama and pgvector to guarantee a 100% local, zero-telemetry architecture.
 * **Code-Syntax Semantic Understanding:** Focuses on code-specific retrieval through intelligent AST parsing, rather than generic text chunking, preserving the structural relationships between functions, classes, and dependencies.
@@ -16,10 +16,11 @@ Unlike generic knowledge management, wiki searchers, or task-tracking systems, R
 * **Knowledge Drift Detection:** Tracks the specific parser, chunker, and embedding models used during ingestion to warn administrators when chunks become outdated.
 * **Built-in Evaluation Engine:** Write test cases and automatically evaluate responses using an automated **LLM-as-a-Judge** scoring system for Groundedness and Usefulness.
 * **Dynamic UI Themes:** Supports instant, reload-free switching between Light and Dark mode aesthetics using Material Design 3 CSS Variables.
+* **Local Credentials & Profiles:** Full JWT-based authentication system with secure profile stats visualization, ensuring strict air-gapped compatibility (no third-party OAuth).
 
 ---
 
-## 🛠️ Technology Stack
+## Technology Stack
 
 **Frontend**
 * Next.js 14 (App Router)
@@ -37,7 +38,7 @@ Unlike generic knowledge management, wiki searchers, or task-tracking systems, R
 
 ---
 
-##  Repository Structure
+## Repository Structure
 
 ```
 RepoSage/
@@ -59,7 +60,7 @@ For a deep dive into how RepoSage works under the hood, check out the [Documenta
 
 ---
 
-##  Getting Started
+## Getting Started
 
 ### Prerequisites
 * Docker and Docker Compose

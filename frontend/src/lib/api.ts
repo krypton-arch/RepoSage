@@ -1,5 +1,7 @@
 /* API client for RepoSage backend */
 
+import { getSession } from 'next-auth/react';
+
 const API_BASE = 'http://localhost:8000/api';
 
 interface FetchOptions extends RequestInit {
@@ -33,6 +35,15 @@ async function request<T>(endpoint: string, options: FetchOptions = {}): Promise
   // Don't set Content-Type for FormData (browser sets multipart boundary)
   if (!(fetchOptions.body instanceof FormData)) {
     headers['Content-Type'] = 'application/json';
+  }
+
+  try {
+    const session = await getSession();
+    if (session && (session as any).accessToken) {
+      headers['Authorization'] = `Bearer ${(session as any).accessToken}`;
+    }
+  } catch (e) {
+    console.error("Could not get session", e);
   }
 
   const response = await fetch(url, {
@@ -124,7 +135,7 @@ export interface DashboardStats {
 }
 
 export const projects = {
-  list: () => request<{ results: Project[] }>('/projects/'),
+  list: (search?: string) => request<{ results: Project[] }>('/projects/', search ? { params: { search } } : undefined),
   get: (id: string) => request<Project>(`/projects/${id}/`),
   create: (data: { name: string; description?: string; source_type?: string }) =>
     request<Project>('/projects/', { method: 'POST', body: JSON.stringify(data) }),
@@ -143,6 +154,25 @@ export const projects = {
 
 export const dashboard = {
   stats: () => request<DashboardStats>('/dashboard/'),
+};
+
+export interface UserStats {
+  projects_created: number;
+  queries_executed: number;
+  clearance_level: number;
+}
+
+export interface UserProfile {
+  username: string;
+  email: string;
+  date_joined: string;
+  last_login: string | null;
+  is_superuser: boolean;
+  stats: UserStats;
+}
+
+export const authApi = {
+  me: () => request<UserProfile>('/users/me/'),
 };
 
 /* ==== Ingestion ==== */

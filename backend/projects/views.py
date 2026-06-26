@@ -1,6 +1,6 @@
 """Project API views."""
 
-from rest_framework import viewsets, status
+from rest_framework import viewsets, status, filters
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from django.db.models import Count, Avg
@@ -18,6 +18,8 @@ class ProjectViewSet(viewsets.ModelViewSet):
 
     queryset = Project.objects.all()
     serializer_class = ProjectSerializer
+    filter_backends = [filters.SearchFilter]
+    search_fields = ['name', 'description', 'source_path']
 
     def get_serializer_class(self):
         if self.action == 'create':

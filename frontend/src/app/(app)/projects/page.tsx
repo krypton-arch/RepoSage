@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState, FormEvent } from 'react';
-import { useRouter } from 'next/navigation';
+import { useEffect, useState, FormEvent, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Header from '@/components/layout/Header';
 import { StaggerContainer, FadeUpItem, PageTransition, HoverCard } from '@/components/ui/animations';
 import {
@@ -40,7 +40,18 @@ interface CreateProjectForm {
 }
 
 export default function ProjectsPage() {
+  return (
+    <Suspense fallback={<div className="p-8 font-code-md text-center animate-pulse">LOADING_DATA...</div>}>
+      <ProjectsPageContent />
+    </Suspense>
+  );
+}
+
+function ProjectsPageContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const searchQuery = searchParams.get('q') || undefined;
+
   const [projectList, setProjectList] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -55,7 +66,7 @@ export default function ProjectsPage() {
   const fetchProjects = () => {
     setLoading(true);
     projects
-      .list()
+      .list(searchQuery)
       .then((data) => setProjectList(data.results))
       .catch((err) => setError(err.message ?? 'Failed to load projects'))
       .finally(() => setLoading(false));
@@ -63,7 +74,7 @@ export default function ProjectsPage() {
 
   useEffect(() => {
     fetchProjects();
-  }, []);
+  }, [searchQuery]);
 
   const handleCreate = async (e: FormEvent) => {
     e.preventDefault();

@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation';
 const navLinks = [
   { label: 'Dashboard', icon: 'dashboard', href: '/dashboard' },
   { label: 'Projects', icon: 'folder_open', href: '/projects' },
+  { label: 'Profile', icon: 'shield_person', href: '/profile' },
 ];
 
 export default function Sidebar() {
