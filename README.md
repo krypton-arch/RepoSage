@@ -12,9 +12,10 @@ Unlike generic knowledge management, wiki searchers, or task-tracking systems, R
 * **Code-Syntax Semantic Understanding:** Focuses on code-specific retrieval through intelligent AST parsing, rather than generic text chunking, preserving the structural relationships between functions, classes, and dependencies.
 * **Advanced Retrieval Pipelines:** Implements Vector, Lexical (BM25), and Hybrid searches using Reciprocal Rank Fusion (RRF) for precise code discovery.
 * **Cross-Encoder Reranking:** Filters and reranks retrieved code chunks to ensure the LLM receives only the most highly relevant semantic context.
-* **Deep Observability:** Tracks pipeline execution times, LLM generation latency, context tokens used, and specific file line numbers for perfect answer attribution.
+* **Deep Observability & Real-Time Polling:** Tracks pipeline execution times, LLM generation latency, and displays real-time ingestion progress directly in the web dashboard.
 * **Knowledge Drift Detection:** Tracks the specific parser, chunker, and embedding models used during ingestion to warn administrators when chunks become outdated.
-* **Built-in Evaluation Engine:** Write test cases for your codebase and automatically measure retrieval recall, precision, and latency regression over time.
+* **Built-in Evaluation Engine:** Write test cases and automatically evaluate responses using an automated **LLM-as-a-Judge** scoring system for Groundedness and Usefulness.
+* **Dynamic UI Themes:** Supports instant, reload-free switching between Light and Dark mode aesthetics using Material Design 3 CSS Variables.
 
 ---
 

@@ -18,3 +18,7 @@ If a job is interrupted, the `trigger_ingestion(resume=True, job_id=...)` functi
 
 ## Staleness Tracking
 Each chunk records the `parser_version` and `chunker_version` used during its creation. The `common.versioning` module can generate staleness reports to alert administrators if chunks were processed with outdated logic.
+
+## Real-Time Progress Tracking
+When a user uploads files through the UI, the frontend initiates a polling mechanism (`ingestion.listJobs(projectId)`) to monitor active background tasks. 
+An `IngestionProgressBar` visually indicates the percentage of files processed, failed, and pending in real-time, providing deep transparency into the vectorization pipeline state.
