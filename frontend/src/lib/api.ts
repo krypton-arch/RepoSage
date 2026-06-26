@@ -409,6 +409,10 @@ export const evaluation = {
       method: 'POST',
       body: JSON.stringify(data),
     }),
+  deleteCase: (projectId: string, caseId: string) =>
+    request<void>(`/evaluation/projects/${projectId}/evaluation/cases/${caseId}/`, {
+      method: 'DELETE',
+    }),
   runAll: (projectId: string, topK: number = 10) =>
     request<{ summary: Record<string, unknown>; results: unknown[] }>(
       `/evaluation/projects/${projectId}/evaluation/run/`,
@@ -416,6 +420,10 @@ export const evaluation = {
     ),
   listRuns: (projectId: string, caseId: string) =>
     request<EvaluationRun[]>(`/evaluation/projects/${projectId}/evaluation/cases/${caseId}/runs/`),
+  deleteRun: (projectId: string, caseId: string, runId: string) =>
+    request<void>(`/evaluation/projects/${projectId}/evaluation/cases/${caseId}/runs/${runId}/`, {
+      method: 'DELETE',
+    }),
   compareRuns: (projectId: string, runAId: string, runBId: string) =>
     request<EvaluationRunComparison>(
       `/evaluation/projects/${projectId}/evaluation/compare/`,

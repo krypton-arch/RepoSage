@@ -4,6 +4,8 @@ import { useState, useEffect, useCallback, use } from 'react';
 import { useRouter } from 'next/navigation';
 import { useDropzone } from 'react-dropzone';
 import { motion, AnimatePresence } from 'framer-motion';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import TraceInspector from '@/components/project/TraceInspector';
 import SettingsPanel from '@/components/project/SettingsPanel';
 import StalenessIndicator from '@/components/project/StalenessIndicator';
@@ -188,6 +190,29 @@ export default function ProjectDetailPage({
     fetchAll();
   }, [fetchAll]);
 
+  /* ---- Poll running jobs ---- */
+  const hasRunningJobs = jobs.some((j) => ['pending', 'running', 'ingesting'].includes(j.status.toLowerCase()));
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    const checkJobs = async () => {
+      try {
+        const currentJobs = await ingestion.listJobs(id);
+        setJobs(currentJobs);
+        if (!currentJobs.some((j) => ['pending', 'running', 'ingesting'].includes(j.status.toLowerCase()))) {
+          clearInterval(interval);
+          // Refresh stats and documents when jobs finish
+          projects.stats(id).then(setStats).catch(() => {});
+          ingestion.listDocuments(id).then(setDocuments).catch(() => {});
+        }
+      } catch (err) {}
+    };
+
+    if (hasRunningJobs) {
+      interval = setInterval(checkJobs, 2000);
+    }
+    return () => clearInterval(interval);
+  }, [id, hasRunningJobs]);
+
   /* ---- Load queries when Query tab is activated ---- */
   const fetchQueries = useCallback(async () => {
     setQueriesLoading(true);
@@ -239,18 +264,22 @@ export default function ProjectDetailPage({
     }
   };
 
-  const loadEvalRuns = async (caseId: string) => {
-    if (expandedCaseId === caseId) {
-      setExpandedCaseId(null);
-      return;
-    }
-    setExpandedCaseId(caseId);
+  const refreshEvalRuns = async (caseId: string) => {
     try {
       const runs = await evaluation.listRuns(id, caseId);
       setEvalRuns((prev) => ({ ...prev, [caseId]: runs }));
     } catch {
       setEvalRuns((prev) => ({ ...prev, [caseId]: [] }));
     }
+  };
+
+  const loadEvalRuns = async (caseId: string) => {
+    if (expandedCaseId === caseId) {
+      setExpandedCaseId(null);
+      return;
+    }
+    setExpandedCaseId(caseId);
+    await refreshEvalRuns(caseId);
   };
 
   const handleRunEvaluation = async () => {
@@ -281,6 +310,27 @@ export default function ProjectDetailPage({
       alert(`Failed to create pipeline stage: ${err instanceof Error ? err.message : 'Unknown error'}`);
     } finally {
       setCreatingCase(false);
+    }
+  };
+
+  const handleDeleteCase = async (caseId: string) => {
+    if (!confirm('Are you sure you want to delete this test case?')) return;
+    try {
+      await evaluation.deleteCase(id, caseId);
+      if (expandedCaseId === caseId) setExpandedCaseId(null);
+      fetchEvalCases();
+    } catch (err) {
+      alert(`Failed to delete case: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    }
+  };
+
+  const handleDeleteRun = async (caseId: string, runId: string) => {
+    if (!confirm('Are you sure you want to delete this evaluation run?')) return;
+    try {
+      await evaluation.deleteRun(id, caseId, runId);
+      await refreshEvalRuns(caseId);
+    } catch (err) {
+      alert(`Failed to delete run: ${err instanceof Error ? err.message : 'Unknown error'}`);
     }
   };
 
@@ -434,6 +484,36 @@ export default function ProjectDetailPage({
   };
 
   /* ---- Loading / Error states ---- */
+
+  function TableSkeleton() {
+    return (
+      <div className="border-2 border-[var(--surface-container)] bg-[var(--surface-container-lowest)] mt-8 animate-pulse">
+        <div className="p-4 border-b-2 border-[var(--surface-container)]">
+          <div className="w-40 h-4 bg-[var(--surface-container)]"></div>
+        </div>
+        <div className="p-4 flex flex-col gap-4">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="w-full h-8 bg-[var(--surface-dim)] border border-[var(--surface-container)]"></div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  function IngestionProgressBar({ processed, total }: { processed: number; total: number }) {
+    const percent = total > 0 ? Math.round((processed / total) * 100) : 0;
+    return (
+      <div className="w-full flex items-center gap-3 mt-1">
+        <div className="flex-1 h-1.5 bg-[var(--surface-container-lowest)] border border-[var(--surface-container)] overflow-hidden">
+          <div 
+            style={{ width: `${percent}%` }} 
+            className="h-full bg-[var(--secondary)] transition-all duration-300"
+          />
+        </div>
+        <span className="font-code-sm text-[var(--on-surface-variant)] w-8 text-right">{percent}%</span>
+      </div>
+    );
+  }
 
   if (loading) {
     return (
@@ -671,7 +751,12 @@ export default function ProjectDetailPage({
                             <span className={statusBadgeClass(job.status)}>{job.status}</span>
                           </td>
                           <td>
-                            {job.processed_files}/{job.total_files}
+                            <div className="flex flex-col">
+                              <span className="font-code-sm">{job.processed_files}/{job.total_files}</span>
+                              {['pending', 'running', 'ingesting'].includes(job.status.toLowerCase()) && (
+                                <IngestionProgressBar processed={job.processed_files} total={job.total_files} />
+                              )}
+                            </div>
                           </td>
                           <td>{job.total_chunks_created}</td>
                           <td>
@@ -751,44 +836,44 @@ export default function ProjectDetailPage({
       {/* -------- QUERY TAB -------- */}
       {/* -------- QUERY TAB (IDE/CHAT STYLE) -------- */}
       {activeTab === 'query' && (
-        <div className="flex h-[70vh] min-h-[600px] border-2 border-[#1e293b] bg-[#0c0e12] overflow-hidden rounded-none shadow-[8px_8px_0px_0px_rgba(30,41,59,1)]">
+        <div className="flex h-[70vh] min-h-[600px] border-2 border-[var(--surface-container)] bg-[var(--surface-container-lowest)] overflow-hidden rounded-none shadow-[8px_8px_0px_0px_rgba(30,41,59,1)]">
           {/* Left Pane: Context Explorer (Sidebar) */}
-          <div className="w-[320px] md:w-[400px] flex-shrink-0 border-r-2 border-[#1e293b] bg-[#111317] flex flex-col relative">
-            <div className="p-4 border-b-2 border-[#1e293b] flex justify-between items-center bg-[#0c0e12]">
+          <div className="w-[320px] md:w-[400px] flex-shrink-0 border-r-2 border-[var(--surface-container)] bg-[var(--surface-dim)] flex flex-col relative">
+            <div className="p-4 border-b-2 border-[var(--surface-container)] flex justify-between items-center bg-[var(--surface-container-lowest)]">
               <div className="flex items-center gap-2">
-                <span className="material-symbols-outlined text-[#6366f1] text-[18px]">account_tree</span>
-                <h3 className="font-label-caps tracking-widest text-[#e2e2e8]">CONTEXT_EXPLORER</h3>
+                <span className="material-symbols-outlined text-[var(--accent-indigo)] text-[18px]">account_tree</span>
+                <h3 className="font-label-caps tracking-widest text-[var(--on-surface)]">CONTEXT_EXPLORER</h3>
               </div>
             </div>
             
             <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
               {!selectedQuery ? (
                 <div className="h-full flex flex-col items-center justify-center text-center opacity-50 p-6">
-                  <span className="material-symbols-outlined text-[48px] mb-4 text-[#94a3b8]">find_in_page</span>
-                  <p className="font-body-md text-[#94a3b8]">No query selected.</p>
-                  <p className="font-label-caps text-[10px] mt-2 text-[#6366f1]">AWAITING_INPUT</p>
+                  <span className="material-symbols-outlined text-[48px] mb-4 text-[var(--on-surface-variant)]">find_in_page</span>
+                  <p className="font-body-md text-[var(--on-surface-variant)]">No query selected.</p>
+                  <p className="font-label-caps text-[10px] mt-2 text-[var(--accent-indigo)]">AWAITING_INPUT</p>
                 </div>
               ) : selectedQuery.retrieved_chunks && selectedQuery.retrieved_chunks.length > 0 ? (
                 <div className="flex flex-col gap-4">
                   <div className="flex items-center gap-2 mb-2">
-                    <div className="w-2 h-2 bg-[#10b981] animate-pulse rounded-none"></div>
-                    <span className="font-label-caps text-[#10b981] text-[10px]">AST_NODES_LOADED</span>
+                    <div className="w-2 h-2 bg-[var(--accent-emerald)] animate-pulse rounded-none"></div>
+                    <span className="font-label-caps text-[var(--accent-emerald)] text-[10px]">AST_NODES_LOADED</span>
                   </div>
                   {selectedQuery.retrieved_chunks.map((rc, idx) => (
-                    <div key={rc.id || idx} className="border border-[#1e293b] bg-[#0c0e12] rounded-none group hover:border-[#6366f1] transition-colors">
-                      <div className="p-2 border-b border-[#1e293b] flex items-center justify-between bg-[#111317]">
+                    <div key={rc.id || idx} className="border border-[var(--surface-container)] bg-[var(--surface-container-lowest)] rounded-none group hover:border-[var(--accent-indigo)] transition-colors">
+                      <div className="p-2 border-b border-[var(--surface-container)] flex items-center justify-between bg-[var(--surface-dim)]">
                         <div className="flex items-center gap-2 overflow-hidden">
-                          <span className="material-symbols-outlined text-[14px] text-[#94a3b8]">description</span>
-                          <span className="font-code-sm text-[#e2e2e8] truncate" title={rc.file_path}>{rc.file_path.split('/').pop()}</span>
+                          <span className="material-symbols-outlined text-[14px] text-[var(--on-surface-variant)]">description</span>
+                          <span className="font-code-sm text-[var(--on-surface)] truncate" title={rc.file_path}>{rc.file_path.split('/').pop()}</span>
                         </div>
-                        <span className="font-label-caps text-[10px] text-[#6366f1] bg-[#6366f1]/10 px-1">{rc.chunk_type}</span>
+                        <span className="font-label-caps text-[10px] text-[var(--accent-indigo)] bg-[var(--accent-indigo)]/10 px-1">{rc.chunk_type}</span>
                       </div>
                       <div className="p-3">
                         <div className="flex items-center justify-between mb-2">
-                          <span className="font-label-caps text-[10px] text-[#94a3b8]">SCORE: {rc.similarity_score.toFixed(3)}</span>
-                          <span className="font-label-caps text-[10px] text-[#38bdf8]">{rc.used_in_answer ? 'USED' : 'REF'}</span>
+                          <span className="font-label-caps text-[10px] text-[var(--on-surface-variant)]">SCORE: {rc.similarity_score.toFixed(3)}</span>
+                          <span className="font-label-caps text-[10px] text-[var(--secondary)]">{rc.used_in_answer ? 'USED' : 'REF'}</span>
                         </div>
-                        <pre className="font-code-md text-[11px] text-[#94a3b8] overflow-x-auto custom-scrollbar leading-relaxed">
+                        <pre className="font-code-md text-[11px] text-[var(--on-surface-variant)] overflow-x-auto custom-scrollbar leading-relaxed">
                           {rc.content.substring(0, 150)}{rc.content.length > 150 ? '...' : ''}
                         </pre>
                       </div>
@@ -797,14 +882,14 @@ export default function ProjectDetailPage({
                 </div>
               ) : (
                 <div className="h-full flex items-center justify-center text-center opacity-50 p-6">
-                  <p className="font-body-md text-[#94a3b8]">No context chunks retrieved.</p>
+                  <p className="font-body-md text-[var(--on-surface-variant)]">No context chunks retrieved.</p>
                 </div>
               )}
             </div>
           </div>
 
           {/* Right Pane: Chat Interface */}
-          <div className="flex-1 flex flex-col bg-[#0c0e12] relative">
+          <div className="flex-1 flex flex-col bg-[var(--surface-container-lowest)] relative">
             {/* Chat History & Trace Inspector */}
             <div className="flex-1 overflow-y-auto p-6 custom-scrollbar relative z-10 flex flex-col gap-6">
               {/* Optional: CRT Overlay restricted to Chat */}
@@ -812,14 +897,14 @@ export default function ProjectDetailPage({
               
               {queriesLoading ? (
                 <div className="flex flex-col gap-4 w-full max-w-3xl mx-auto mt-4 relative z-10">
-                  <div className="h-16 bg-[#111317] border border-[#1e293b] animate-pulse"></div>
-                  <div className="h-40 bg-[#111317] border border-[#1e293b] animate-pulse"></div>
+                  <div className="h-16 bg-[var(--surface-dim)] border border-[var(--surface-container)] animate-pulse"></div>
+                  <div className="h-40 bg-[var(--surface-dim)] border border-[var(--surface-container)] animate-pulse"></div>
                 </div>
               ) : queries.length === 0 ? (
                 <div className="m-auto text-center relative z-10">
-                  <span className="material-symbols-outlined text-[64px] text-[#334155] mb-4">terminal</span>
-                  <h3 className="font-headline-md text-white">SYSTEM_READY</h3>
-                  <p className="font-body-md text-[#94a3b8] mt-2">Initialize query sequence below.</p>
+                  <span className="material-symbols-outlined text-[64px] text-[var(--surface-container-highest)] mb-4">terminal</span>
+                  <h3 className="font-headline-md text-[var(--on-surface-strong)]">SYSTEM_READY</h3>
+                  <p className="font-body-md text-[var(--on-surface-variant)] mt-2">Initialize query sequence below.</p>
                 </div>
               ) : (
                 <div className="flex flex-col gap-8 w-full max-w-4xl mx-auto relative z-10">
@@ -827,58 +912,60 @@ export default function ProjectDetailPage({
                   {selectedQuery ? (
                     <div className="flex flex-col gap-4">
                       {/* User Bubble */}
-                      <div className="self-end max-w-[80%] bg-[#111317] border border-[#334155] p-4 border-r-4 border-r-[#6366f1]">
-                        <p className="font-label-caps text-[10px] text-[#94a3b8] mb-2 flex items-center gap-2">
+                      <div className="self-end max-w-[80%] bg-[var(--surface-dim)] border border-[var(--surface-container-highest)] p-4 border-r-4 border-r-[var(--accent-indigo)]">
+                        <p className="font-label-caps text-[10px] text-[var(--on-surface-variant)] mb-2 flex items-center gap-2">
                           <span className="material-symbols-outlined text-[12px]">person</span> USER_INPUT
                         </p>
-                        <p className="font-body-lg text-white">{selectedQuery.question}</p>
+                        <p className="font-body-lg text-[var(--on-surface-strong)]">{selectedQuery.question}</p>
                       </div>
 
                       {/* Engine Bubble */}
-                      <div className="self-start w-full max-w-[95%] bg-[#0c0e12] border-2 border-[#1e293b] p-6 shadow-[4px_4px_0px_0px_rgba(30,41,59,1)] relative">
-                        <p className="font-label-caps text-[10px] text-[#10b981] mb-4 flex items-center gap-2">
+                      <div className="self-start w-full max-w-[95%] bg-[var(--surface-container-lowest)] border-2 border-[var(--surface-container)] p-6 shadow-[4px_4px_0px_0px_rgba(30,41,59,1)] relative">
+                        <p className="font-label-caps text-[10px] text-[var(--accent-emerald)] mb-4 flex items-center gap-2">
                           <span className="material-symbols-outlined text-[12px] animate-pulse">memory</span> REPOSAGE_ENGINE
                         </p>
-                        <div className="font-body-md text-[#e2e2e8] leading-relaxed whitespace-pre-wrap">
-                          {selectedQuery.answer || 'No answer generated.'}
+                        <div className="font-body-md text-[var(--on-surface)] leading-relaxed prose prose-invert prose-sm max-w-none prose-p:leading-relaxed prose-pre:bg-[var(--surface-dim)] prose-pre:border prose-pre:border-[var(--surface-container)] prose-code:text-[var(--secondary)] prose-a:text-[var(--accent-indigo)] prose-headings:text-[var(--on-surface-strong)] prose-strong:text-[var(--accent-emerald)]">
+                          <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                            {selectedQuery.answer || 'No answer generated.'}
+                          </ReactMarkdown>
                         </div>
                         
                         {/* Inline Trace Stats */}
-                        <div className="mt-6 pt-4 border-t border-[#1e293b] flex flex-wrap gap-4">
+                        <div className="mt-6 pt-4 border-t border-[var(--surface-container)] flex flex-wrap gap-4">
                           <div className="flex items-center gap-2">
-                            <span className="font-label-caps text-[10px] text-[#94a3b8]">CONFIDENCE:</span>
+                            <span className="font-label-caps text-[10px] text-[var(--on-surface-variant)]">CONFIDENCE:</span>
                             <span className={confidenceBadgeClass(selectedQuery.confidence_level)}>{selectedQuery.confidence_level}</span>
                           </div>
                           <div className="flex items-center gap-2">
-                            <span className="font-label-caps text-[10px] text-[#94a3b8]">LATENCY:</span>
-                            <span className="font-code-sm text-[#38bdf8]">{formatMs(selectedQuery.retrieval_time_ms + selectedQuery.generation_time_ms)}</span>
+                            <span className="font-label-caps text-[10px] text-[var(--on-surface-variant)]">LATENCY:</span>
+                            <span className="font-code-sm text-[var(--secondary)]">{formatMs(selectedQuery.retrieval_time_ms + selectedQuery.generation_time_ms)}</span>
                           </div>
                           <div className="flex items-center gap-2">
-                            <span className="font-label-caps text-[10px] text-[#94a3b8]">TOKENS:</span>
-                            <span className="font-code-sm text-[#94a3b8]">{selectedQuery.context_token_estimate || 'N/A'}</span>
+                            <span className="font-label-caps text-[10px] text-[var(--on-surface-variant)]">TOKENS:</span>
+                            <span className="font-code-sm text-[var(--on-surface-variant)]">{selectedQuery.context_token_estimate || 'N/A'}</span>
                           </div>
                         </div>
                       </div>
                     </div>
                   ) : (
                     <div className="m-auto text-center">
-                      <p className="font-label-caps text-[#94a3b8]">SELECT A QUERY FROM HISTORY</p>
+                      <p className="font-label-caps text-[var(--on-surface-variant)]">SELECT A QUERY FROM HISTORY</p>
                     </div>
                   )}
 
                   {/* Minified History List */}
                   {queries.length > 1 && (
-                    <div className="mt-8 pt-8 border-t border-[#1e293b]">
-                      <h4 className="font-label-caps text-[#6366f1] mb-4">PREVIOUS_SESSIONS</h4>
+                    <div className="mt-8 pt-8 border-t border-[var(--surface-container)]">
+                      <h4 className="font-label-caps text-[var(--accent-indigo)] mb-4">PREVIOUS_SESSIONS</h4>
                       <div className="flex flex-col gap-2">
                         {queries.filter(q => q.id !== selectedQuery?.id).map((q) => (
                           <div 
                             key={q.id}
                             onClick={() => loadQueryDetail(q.id)}
-                            className="p-3 border border-[#1e293b] bg-[#111317] hover:border-[#334155] cursor-pointer flex justify-between items-center group transition-colors"
+                            className="p-3 border border-[var(--surface-container)] bg-[var(--surface-dim)] hover:border-[var(--surface-container-highest)] cursor-pointer flex justify-between items-center group transition-colors"
                           >
-                            <span className="font-body-sm text-[#94a3b8] group-hover:text-white truncate max-w-[70%]">{q.question}</span>
-                            <span className="font-code-md text-[10px] text-[#334155]">{timeAgo(q.created_at)}</span>
+                            <span className="font-body-sm text-[var(--on-surface-variant)] group-hover:text-[var(--on-surface-strong)] truncate max-w-[70%]">{q.question}</span>
+                            <span className="font-code-md text-[10px] text-[var(--surface-container-highest)]">{timeAgo(q.created_at)}</span>
                           </div>
                         ))}
                       </div>
@@ -889,11 +976,11 @@ export default function ProjectDetailPage({
             </div>
 
             {/* Input Bar */}
-            <div className="p-4 border-t-2 border-[#1e293b] bg-[#111317] relative z-20">
+            <div className="p-4 border-t-2 border-[var(--surface-container)] bg-[var(--surface-dim)] relative z-20">
               <div className="flex gap-4 items-center max-w-4xl mx-auto relative">
                 <input
                   type="text"
-                  className="flex-1 bg-[#0c0e12] border-2 border-[#334155] text-white font-body-md px-4 py-3 outline-none focus:border-[#6366f1] transition-colors placeholder-[#475569]"
+                  className="flex-1 bg-[var(--surface-container-lowest)] border-2 border-[var(--surface-container-highest)] text-[var(--on-surface-strong)] font-body-md px-4 py-3 outline-none focus:border-[var(--accent-indigo)] transition-colors placeholder-[var(--outline)]"
                   placeholder="Query codebase (e.g. 'How does the auth middleware handle JWT?')"
                   value={questionInput}
                   onChange={(e) => setQuestionInput(e.target.value)}
@@ -901,7 +988,7 @@ export default function ProjectDetailPage({
                   disabled={askingQuestion}
                 />
                 <button
-                  className="bg-[#6366f1] text-white font-label-caps tracking-widest px-6 py-3 border-2 border-[#6366f1] hover:bg-transparent hover:text-[#6366f1] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shadow-[4px_4px_0px_0px_rgba(30,41,59,1)] active:translate-y-1 active:translate-x-1 active:shadow-none"
+                  className="bg-[var(--accent-indigo)] text-white font-label-caps tracking-widest px-6 py-3 border-2 border-[var(--accent-indigo)] hover:bg-transparent hover:text-[var(--accent-indigo)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shadow-[4px_4px_0px_0px_rgba(30,41,59,1)] active:translate-y-1 active:translate-x-1 active:shadow-none"
                   onClick={handleAskQuestion}
                   disabled={askingQuestion || !questionInput.trim()}
                 >
@@ -931,17 +1018,17 @@ export default function ProjectDetailPage({
           className="grid lg:grid-cols-[350px_1fr] gap-8 max-w-full mx-auto w-full items-start"
         >
           {/* Create Test Case */}
-          <section className="border-2 border-[#1e293b] bg-[#111317] shadow-[6px_6px_0px_0px_rgba(30,41,59,1)] sticky top-8">
-            <div className="p-4 border-b-2 border-[#1e293b] bg-[#0c0e12] flex items-center gap-3">
-              <span className="material-symbols-outlined text-[#38bdf8]">build_circle</span>
-              <h2 className="font-label-caps tracking-widest text-white text-sm">DEFINE_PIPELINE</h2>
+          <section className="border-2 border-[var(--surface-container)] bg-[var(--surface-dim)] shadow-[6px_6px_0px_0px_rgba(30,41,59,1)] sticky top-8">
+            <div className="p-4 border-b-2 border-[var(--surface-container)] bg-[var(--surface-container-lowest)] flex items-center gap-3">
+              <span className="material-symbols-outlined text-[var(--secondary)]">build_circle</span>
+              <h2 className="font-label-caps tracking-widest text-[var(--on-surface-strong)] text-sm">DEFINE_PIPELINE</h2>
             </div>
             <div className="p-6 flex flex-col gap-6">
               <div className="flex flex-col gap-2">
-                <label className="font-label-caps text-[#94a3b8] text-[10px]">TEST_QUERY_INPUT</label>
+                <label className="font-label-caps text-[var(--on-surface-variant)] text-[10px]">TEST_QUERY_INPUT</label>
                 <input
                   type="text"
-                  className="bg-[#0c0e12] border-2 border-[#1e293b] text-white font-body-md px-4 py-3 outline-none focus:border-[#38bdf8] transition-colors placeholder-[#475569]"
+                  className="bg-[var(--surface-container-lowest)] border-2 border-[var(--surface-container)] text-[var(--on-surface-strong)] font-body-md px-4 py-3 outline-none focus:border-[var(--secondary)] transition-colors placeholder-[var(--outline)]"
                   placeholder="e.g. What does the authentication middleware do?"
                   value={newCaseForm.question}
                   onChange={(e) => setNewCaseForm((prev) => ({ ...prev, question: e.target.value }))}
@@ -949,9 +1036,9 @@ export default function ProjectDetailPage({
                 />
               </div>
               <div className="flex flex-col gap-2">
-                <label className="font-label-caps text-[#94a3b8] text-[10px]">EXPECTED_ASSERTIONS</label>
+                <label className="font-label-caps text-[var(--on-surface-variant)] text-[10px]">EXPECTED_ASSERTIONS</label>
                 <textarea
-                  className="bg-[#0c0e12] border-2 border-[#1e293b] text-[#38bdf8] font-code-md px-4 py-3 outline-none focus:border-[#38bdf8] transition-colors placeholder-[#475569] custom-scrollbar"
+                  className="bg-[var(--surface-container-lowest)] border-2 border-[var(--surface-container)] text-[var(--secondary)] font-code-md px-4 py-3 outline-none focus:border-[var(--secondary)] transition-colors placeholder-[var(--outline)] custom-scrollbar"
                   placeholder="e.g. MUST_INCLUDE(JWT validation) && MUST_MENTION(role-based access control)"
                   value={newCaseForm.expected_answer_traits}
                   onChange={(e) => setNewCaseForm((prev) => ({ ...prev, expected_answer_traits: e.target.value }))}
@@ -963,7 +1050,7 @@ export default function ProjectDetailPage({
               <motion.button
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
-                className="bg-[#1e293b] text-[#e2e2e8] font-label-caps tracking-widest px-6 py-3 border-2 border-[#334155] hover:bg-[#38bdf8] hover:text-black hover:border-[#38bdf8] transition-colors disabled:opacity-50 disabled:cursor-not-allowed self-start flex items-center gap-2"
+                className="bg-[var(--surface-container)] text-[var(--on-surface)] font-label-caps tracking-widest px-6 py-3 border-2 border-[var(--surface-container-highest)] hover:bg-[var(--secondary)] hover:text-black hover:border-[var(--secondary)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed self-start flex items-center gap-2"
                 onClick={handleCreateCase}
                 disabled={creatingCase || !newCaseForm.question.trim()}
               >
@@ -974,25 +1061,25 @@ export default function ProjectDetailPage({
           </section>
 
           {/* Run All Evaluations */}
-          <section className="border-2 border-[#1e293b] bg-[#0c0e12] shadow-[6px_6px_0px_0px_rgba(30,41,59,1)]">
-            <div className="p-4 border-b-2 border-[#1e293b] bg-[#111317] flex items-center justify-between">
+          <section className="border-2 border-[var(--surface-container)] bg-[var(--surface-container-lowest)] shadow-[6px_6px_0px_0px_rgba(30,41,59,1)]">
+            <div className="p-4 border-b-2 border-[var(--surface-container)] bg-[var(--surface-dim)] flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <span className="material-symbols-outlined text-[#10b981]">science</span>
-                <h2 className="font-label-caps tracking-widest text-white">EVALUATION_SUITE</h2>
-                <span className="font-code-sm text-[#94a3b8] ml-2 px-2 py-0.5 border border-[#334155] bg-[#0c0e12]">
+                <span className="material-symbols-outlined text-[var(--accent-emerald)]">science</span>
+                <h2 className="font-label-caps tracking-widest text-[var(--on-surface-strong)]">EVALUATION_SUITE</h2>
+                <span className="font-code-sm text-[var(--on-surface-variant)] ml-2 px-2 py-0.5 border border-[var(--surface-container-highest)] bg-[var(--surface-container-lowest)]">
                   {evalCases.length} TESTS
                 </span>
               </div>
               <div className="flex items-center gap-4">
                 {evalStatus && (
-                  <span className={`font-code-sm ${evalStatus.startsWith('Error') ? 'text-[#ef4444]' : 'text-[#10b981]'}`}>
+                  <span className={`font-code-sm ${evalStatus.startsWith('Error') ? 'text-[var(--error)]' : 'text-[var(--accent-emerald)]'}`}>
                     [{evalStatus}]
                   </span>
                 )}
                 <motion.button
                   whileHover={{ scale: evalRunning || evalCases.length === 0 ? 1 : 1.02, boxShadow: "0px 0px 15px rgba(16,185,129,0.3)" }}
                   whileTap={{ scale: 0.98 }}
-                  className="bg-[#10b981] text-black font-label-caps font-bold tracking-widest px-6 py-2 border-2 border-[#10b981] hover:bg-transparent hover:text-[#10b981] transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 relative overflow-hidden"
+                  className="bg-[var(--accent-emerald)] text-black font-label-caps font-bold tracking-widest px-6 py-2 border-2 border-[var(--accent-emerald)] hover:bg-transparent hover:text-[var(--accent-emerald)] transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 relative overflow-hidden"
                   onClick={handleRunEvaluation}
                   disabled={evalRunning || evalCases.length === 0}
                 >
@@ -1016,27 +1103,28 @@ export default function ProjectDetailPage({
               {evalCasesLoading ? (
                 <div className="flex flex-col gap-4 p-6">
                   {[1, 2, 3].map((i) => (
-                    <div key={i} className="h-12 bg-[#111317] border border-[#1e293b] animate-pulse"></div>
+                    <div key={i} className="h-12 bg-[var(--surface-dim)] border border-[var(--surface-container)] animate-pulse"></div>
                   ))}
                 </div>
               ) : evalCases.length === 0 ? (
-                <div className="p-12 flex flex-col items-center justify-center text-center opacity-50 border-t border-dashed border-[#1e293b]">
-                  <span className="material-symbols-outlined text-[48px] text-[#94a3b8] mb-4">flaky</span>
-                  <p className="font-code-md text-[#94a3b8]">NO_TESTS_DEFINED</p>
+                <div className="p-12 flex flex-col items-center justify-center text-center opacity-50 border-t border-dashed border-[var(--surface-container)]">
+                  <span className="material-symbols-outlined text-[48px] text-[var(--on-surface-variant)] mb-4">flaky</span>
+                  <p className="font-code-md text-[var(--on-surface-variant)]">NO_TESTS_DEFINED</p>
                 </div>
               ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full text-left border-collapse">
-                    <thead className="bg-[#111317] border-b border-[#1e293b]">
+                    <thead className="bg-[var(--surface-dim)] border-b border-[var(--surface-container)]">
                       <tr>
-                        <th className="py-3 px-4 w-10 border-r border-[#1e293b]"></th>
-                        <th className="font-label-caps text-[#94a3b8] py-3 px-4 border-r border-[#1e293b]">QUERY_TARGET</th>
-                        <th className="font-label-caps text-[#94a3b8] py-3 px-4 border-r border-[#1e293b]">ASSERTIONS</th>
-                        <th className="font-label-caps text-[#94a3b8] py-3 px-4 border-r border-[#1e293b]">TAGS</th>
-                        <th className="font-label-caps text-[#94a3b8] py-3 px-4">TIMESTAMP</th>
+                        <th className="py-3 px-4 w-10 border-r border-[var(--surface-container)]"></th>
+                        <th className="font-label-caps text-[var(--on-surface-variant)] py-3 px-4 border-r border-[var(--surface-container)]">QUERY_TARGET</th>
+                        <th className="font-label-caps text-[var(--on-surface-variant)] py-3 px-4 border-r border-[var(--surface-container)]">ASSERTIONS</th>
+                        <th className="font-label-caps text-[var(--on-surface-variant)] py-3 px-4 border-r border-[var(--surface-container)]">TAGS</th>
+                        <th className="font-label-caps text-[var(--on-surface-variant)] py-3 px-4 border-r border-[var(--surface-container)]">TIMESTAMP</th>
+                        <th className="py-3 px-4 w-12"></th>
                       </tr>
                     </thead>
-                    <tbody className="font-body-sm text-[#e2e2e8]">
+                    <tbody className="font-body-sm text-[var(--on-surface)]">
                       <AnimatePresence mode="popLayout">
                         {evalCases.map((ec, index) => {
                           const isExp = expandedCaseId === ec.id;
@@ -1049,6 +1137,8 @@ export default function ProjectDetailPage({
                               onToggle={() => loadEvalRuns(ec.id)}
                               runs={runs}
                               index={index}
+                              onDeleteCase={handleDeleteCase}
+                              onDeleteRun={handleDeleteRun}
                             />
                           );
                         })}

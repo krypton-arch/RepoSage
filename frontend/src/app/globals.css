@@ -8,6 +8,74 @@
 
 /* ---- CSS Custom Properties (Design Tokens) ---- */
 :root {
+  /* Surface / Background (Light Mode) */
+  --surface-dim: #d8dadd;
+  --surface: #f9f9fc;
+  --surface-bright: #ffffff;
+  --surface-container-lowest: #ffffff;
+  --surface-container-low: #f3f3f6;
+  --surface-container: #ededf0;
+  --surface-container-high: #e7e8ea;
+  --surface-container-highest: #e2e2e5;
+  --background: #f9f9fc;
+
+  /* Primary */
+  --primary: #494bd6;
+  --primary-container: #e1e0ff;
+  --primary-fixed: #e1e0ff;
+  --primary-fixed-dim: #c0c1ff;
+  --on-primary: #ffffff;
+  --on-primary-container: #07006c;
+  --on-primary-fixed: #07006c;
+  --on-primary-fixed-variant: #2f2ebe;
+  --inverse-primary: #c0c1ff;
+  --surface-tint: #494bd6;
+
+  /* Secondary (Teal) */
+  --secondary: #006a60;
+  --secondary-container: #71f8e4;
+  --secondary-fixed: #71f8e4;
+  --secondary-fixed-dim: #4fdbc8;
+  --on-secondary: #ffffff;
+  --on-secondary-container: #00201c;
+  --on-secondary-fixed: #00201c;
+  --on-secondary-fixed-variant: #005048;
+
+  /* Tertiary (Amber) */
+  --tertiary: #924c00;
+  --tertiary-container: #ffdcc5;
+  --tertiary-fixed: #ffdcc5;
+  --tertiary-fixed-dim: #ffb783;
+  --on-tertiary: #ffffff;
+  --on-tertiary-container: #301400;
+  --on-tertiary-fixed: #301400;
+  --on-tertiary-fixed-variant: #703700;
+
+  /* Error */
+  --error: #ba1a1a;
+  --error-container: #ffdad6;
+  --on-error: #ffffff;
+  --on-error-container: #410002;
+
+  /* Neutral / Text */
+  --on-surface: #1a1c20;
+  --on-surface-variant: #44474f;
+  --on-surface-strong: #000000;
+  --on-background: #1a1c20;
+  --outline: #74777f;
+  --outline-variant: #c4c6cf;
+  --inverse-surface: #2f3035;
+  --inverse-on-surface: #f1f0f4;
+  --surface-variant: #e0e2ec;
+
+  /* Accent aliases for convenience */
+  --accent-indigo: #4f46e5;
+  --accent-indigo-hover: #4338ca;
+  --accent-emerald: #059669;
+  --accent-emerald-dim: rgba(5, 150, 105, 0.15);
+}
+
+.dark {
   /* Surface / Background */
   --surface-dim: #111317;
   --surface: #111317;
@@ -60,6 +128,7 @@
   /* Neutral / Text */
   --on-surface: #e2e2e8;
   --on-surface-variant: #c7c4d7;
+  --on-surface-strong: #ffffff;
   --on-background: #e2e2e8;
   --outline: #908fa0;
   --outline-variant: #464554;
@@ -72,7 +141,9 @@
   --accent-indigo-hover: #4f46e5;
   --accent-emerald: #10b981;
   --accent-emerald-dim: rgba(16, 185, 129, 0.2);
+}
 
+:root {
   /* Typography */
   --font-sans: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --font-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;

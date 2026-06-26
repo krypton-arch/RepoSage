@@ -14,6 +14,7 @@ from evaluation.serializers import (
     EvaluationRunCompactSerializer,
 )
 from generation.services import generate_answer
+from evaluation.services import evaluate_run_answer
 from common.versioning import get_current_versions
 
 
@@ -94,6 +95,14 @@ def run_evaluation(request, project_id):
             recall = None
             expected_files_retrieved = None
 
+        # Evaluate groundedness and usefulness using LLM judge
+        evaluation_result = evaluate_run_answer(
+            question=case.question,
+            expected_traits=case.expected_answer_traits,
+            generated_answer=result['answer'],
+            retrieved_chunks=result['retrieved_chunks']
+        )
+
         duration = time.time() - start_time
 
         # Store run with config snapshot and split metrics
@@ -103,6 +112,9 @@ def run_evaluation(request, project_id):
             retrieved_chunks=[c['file_path'] for c in result['retrieved_chunks']],
             expected_files_retrieved=expected_files_retrieved,
             retrieval_precision=precision,
+            groundedness_rating=evaluation_result['groundedness'],
+            usefulness_rating=evaluation_result['usefulness'],
+            reviewer_notes=evaluation_result['notes'],
             status=EvaluationRun.Status.COMPLETED,
             duration_seconds=round(duration, 2),
             # Config snapshot
@@ -154,6 +166,19 @@ def list_runs(request, project_id, case_id):
     runs = EvaluationRun.objects.filter(evaluation_case=case)
     serializer = EvaluationRunSerializer(runs, many=True)
     return Response(serializer.data)
+
+
+@api_view(['DELETE'])
+def delete_run(request, project_id, case_id, run_id):
+    """Delete an evaluation run."""
+    run = get_object_or_404(
+        EvaluationRun,
+        pk=run_id,
+        evaluation_case_id=case_id,
+        evaluation_case__project_id=project_id
+    )
+    run.delete()
+    return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 @api_view(['GET'])

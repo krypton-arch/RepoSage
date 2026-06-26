@@ -52,8 +52,8 @@ export function AliveTerminal() {
   }, []);
 
   return (
-    <div className={`border-2 border-[#334155] bg-[#0c0e12] p-4 rounded-none overflow-hidden relative shadow-[8px_8px_0px_0px_rgba(99,102,241,0.2)] transition-transform duration-75 ${glitch ? 'translate-x-1 -translate-y-1' : ''}`}>
-      <div className="flex items-center justify-between border-b-2 border-[#334155] mb-4 pb-2">
+    <div className={`border-2 border-[var(--surface-container-highest)] bg-[var(--surface-container-lowest)] p-4 rounded-none overflow-hidden relative shadow-[8px_8px_0px_0px_rgba(99,102,241,0.2)] transition-transform duration-75 ${glitch ? 'translate-x-1 -translate-y-1' : ''}`}>
+      <div className="flex items-center justify-between border-b-2 border-[var(--surface-container-highest)] mb-4 pb-2">
         <div className="flex gap-2">
           <div className="w-3 h-3 rounded-none bg-[var(--error)]"></div>
           <div className="w-3 h-3 rounded-none bg-[var(--secondary)]"></div>
