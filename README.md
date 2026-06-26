@@ -105,4 +105,4 @@ ollama run mistral
 
 ##  License
 
-This project is proprietary and intended for internal use unless specified otherwise.
+MIT License
