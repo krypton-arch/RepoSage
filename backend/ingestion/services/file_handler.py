@@ -138,9 +138,16 @@ def extract_zip(project_id: str, zip_file) -> Path:
     with open(temp_zip, 'wb+') as dest:
         for chunk in zip_file.chunks():
             dest.write(chunk)
-    # Extract
+    # Extract with path traversal protection (Zip Slip)
+    resolved_upload_dir = upload_dir.resolve()
     with zipfile.ZipFile(temp_zip, 'r') as zf:
-        zf.extractall(upload_dir)
+        for member in zf.infolist():
+            # Resolve the intended absolute path of the member
+            target_path = (resolved_upload_dir / member.filename).resolve()
+            # Ensure the target path is strictly within the upload directory
+            if not target_path.is_relative_to(resolved_upload_dir):
+                raise ValueError(f"Zip Slip vulnerability detected: {member.filename} attempts to traverse outside target directory.")
+            zf.extract(member, upload_dir)
     # Cleanup temp zip
     temp_zip.unlink()
     return upload_dir
