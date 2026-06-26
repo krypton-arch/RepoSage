@@ -12,14 +12,15 @@ from query.models import QuerySession
 @api_view(['GET'])
 def dashboard_stats(request):
     """Return global statistics for the dashboard."""
-    projects = Project.objects.all()
+    user_id = str(request.user.id)
+    projects = Project.objects.filter(owner_id=user_id)
     total_projects = projects.count()
-    total_files = SourceDocument.objects.count()
-    total_chunks = DocumentChunk.objects.count()
-    total_queries = QuerySession.objects.count()
+    total_files = SourceDocument.objects.filter(project__owner_id=user_id).count()
+    total_chunks = DocumentChunk.objects.filter(project__owner_id=user_id).count()
+    total_queries = QuerySession.objects.filter(project__owner_id=user_id).count()
 
     # Recent ingestion jobs
-    recent_jobs = IngestionJob.objects.order_by('-created_at')[:5]
+    recent_jobs = IngestionJob.objects.filter(project__owner_id=user_id).order_by('-created_at')[:5]
     jobs_data = [
         {
             'id': str(job.id),
@@ -37,7 +38,7 @@ def dashboard_stats(request):
     ]
 
     # Failed jobs count
-    failed_jobs = IngestionJob.objects.filter(status='failed').count()
+    failed_jobs = IngestionJob.objects.filter(project__owner_id=user_id, status='failed').count()
 
     return Response({
         'total_projects': total_projects,

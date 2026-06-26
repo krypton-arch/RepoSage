@@ -43,13 +43,9 @@ class MeView(views.APIView):
         from projects.models import Project
         from query.models import QuerySession
         
-        # If projects aren't directly linked to user IDs yet, we just show global for now
-        # or we filter by owner_id if it matches username
-        projects_owned = Project.objects.filter(owner_id=user.username).count()
-        if projects_owned == 0:
-            projects_owned = Project.objects.count() # fallback to global if not using RBAC yet
-            
-        queries_executed = QuerySession.objects.count() # fallback global
+        # Enforce strict RBAC for user stats
+        projects_owned = Project.objects.filter(owner_id=str(user.id)).count()
+        queries_executed = QuerySession.objects.filter(project__owner_id=str(user.id)).count()
         
         return Response({
             'username': user.username,
