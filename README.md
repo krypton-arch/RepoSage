@@ -64,45 +64,34 @@ For a deep dive into how RepoSage works under the hood, check out the [Documenta
 
 ### Prerequisites
 * Docker and Docker Compose
-* Python 3.11+
-* Node.js 20+
-* Local installation of [Ollama](https://ollama.com/)
+* Local installation of Ollama
 
-### 1. Database Setup
-Start the pgvector database:
+### 1. Configure Environment
+Copy the example environment file and adjust it to your needs (especially `GENERATION_MODEL`):
 ```bash
-docker-compose up -d
+cp .env.example .env
 ```
+Ensure your local Ollama instance has pulled the model you specify in your `.env` file (e.g. `qwen2.5-coder:7b`).
 
-### 2. Backend Setup
-Navigate to the backend, set up a virtual environment, and install dependencies:
+### 2. Deploy the Stack
+The entire application (Database, Backend, Frontend, and Nginx proxy) is fully containerized. To spin up the entire stack, simply run:
 ```bash
-cd backend
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-pip install -r requirements.txt
-
-# Run migrations and start the server
-python manage.py migrate
-python manage.py runserver
+docker-compose up -d --build
 ```
+This will automatically:
+1. Start a PostgreSQL pgvector database.
+2. Build the Django backend and automatically download the HuggingFace embedding models into a persistent cache volume.
+3. Build the Next.js frontend.
+4. Launch an Nginx proxy routing traffic seamlessly on port 80.
 
-### 3. Frontend Setup
-Navigate to the frontend directory and install dependencies:
-```bash
-cd frontend
-npm install
-npm run dev
-```
+### 3. Access the Application
+Once the containers are running, simply navigate to `http://localhost` in your browser. All API requests are automatically routed to the backend via Nginx.
 
-### 4. Configure Ollama
-Ensure Ollama is running locally and pull your preferred embedding and generation models:
-```bash
-ollama run mistral
-```
+### 4. Enterprise Access (Optional)
+To host this securely for an engineering team, deploy this `docker-compose.yml` to a central internal server or VPC, or expose it securely via Cloudflare Tunnels for public access.
 
 ---
 
-##  License
+## License
 
 MIT License
