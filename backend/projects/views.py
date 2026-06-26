@@ -16,15 +16,22 @@ from common.versioning import get_staleness_report
 class ProjectViewSet(viewsets.ModelViewSet):
     """CRUD API for projects."""
 
-    queryset = Project.objects.all()
     serializer_class = ProjectSerializer
     filter_backends = [filters.SearchFilter]
     search_fields = ['name', 'description', 'source_path']
+
+    def get_queryset(self):
+        """Return only projects owned by the requesting user."""
+        return Project.objects.filter(owner_id=str(self.request.user.id))
 
     def get_serializer_class(self):
         if self.action == 'create':
             return ProjectCreateSerializer
         return ProjectSerializer
+
+    def perform_create(self, serializer):
+        """Inject the user ID as the owner_id upon creation."""
+        serializer.save(owner_id=str(self.request.user.id))
 
     def perform_destroy(self, instance):
         """Delete project and all associated data."""

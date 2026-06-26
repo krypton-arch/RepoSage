@@ -1,16 +1,11 @@
 """Access control guardrails — enforces project scope at the service layer.
 
-Current behavior: single-user, all access allowed.
-Future-ready: ownership and visibility fields are already in the schema,
-so multi-user support can be added without schema changes.
+Current behavior: Multi-user JWT authentication. Projects are owned by individual users.
+Visibility controls and shared access lists can be added in the future.
 
-How to add multi-user later:
-1. Add Django User or JWT authentication middleware
-2. Populate owner_id on project creation from request.user
-3. Implement assert_project_access() to check ownership/shared access
-4. Add a SharedAccess model for project sharing (FK to Project + user_id)
-5. Filter documents by visibility in get_visible_chunks_queryset()
-6. No schema migration needed — all fields are already present
+Future extensions:
+1. Add a SharedAccess model for project sharing (FK to Project + user_id)
+2. Filter documents by visibility in get_visible_chunks_queryset()
 """
 
 import logging
@@ -40,11 +35,13 @@ def get_visible_chunks_queryset(project_id: str, user_id: str = 'system') -> Que
     # Future: exclude documents with visibility='hidden'
     # qs = qs.exclude(document__visibility='hidden')
 
-    # Future: enforce project ownership
-    # from projects.models import Project
-    # project = Project.objects.get(id=project_id)
-    # if project.owner_id != user_id and project.visibility == 'private':
-    #     return DocumentChunk.objects.none()
+    from projects.models import Project
+    try:
+        project = Project.objects.get(id=project_id)
+        if project.owner_id != user_id and project.visibility == 'private':
+            return DocumentChunk.objects.none()
+    except Project.DoesNotExist:
+        return DocumentChunk.objects.none()
 
     return qs
 
@@ -52,11 +49,19 @@ def get_visible_chunks_queryset(project_id: str, user_id: str = 'system') -> Que
 def assert_project_access(project_id: str, user_id: str = 'system'):
     """Raise PermissionError if user cannot access this project.
 
-    Current: always passes (single-user MVP).
-    Future: check project.owner_id or shared access list.
+    Enforces:
+    - Project scope (only chunks from the requested project)
+    - Staleness filter (excludes chunks marked as stale)
+    - Project ownership (only the project owner can access it)
     """
-    # MVP: no-op — single user, all access allowed
-    pass
+    from projects.models import Project
+    from rest_framework.exceptions import PermissionDenied
+    try:
+        project = Project.objects.get(id=project_id)
+        if project.owner_id != user_id and project.visibility == 'private':
+            raise PermissionDenied("You do not have permission to access this project.")
+    except Project.DoesNotExist:
+        raise PermissionDenied("Project not found.")
 
 
 def get_project_owner(project_id: str) -> str:

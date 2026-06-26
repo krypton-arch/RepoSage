@@ -24,10 +24,15 @@ class EvaluationCaseViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         project_id = self.kwargs.get('project_id')
-        return EvaluationCase.objects.filter(project_id=project_id)
+        return EvaluationCase.objects.filter(
+            project_id=project_id,
+            project__owner_id=str(self.request.user.id)
+        )
 
     def perform_create(self, serializer):
         project_id = self.kwargs.get('project_id')
+        from common.acl import assert_project_access
+        assert_project_access(project_id, str(self.request.user.id))
         project = get_object_or_404(Project, pk=project_id)
         serializer.save(project=project)
 
@@ -58,6 +63,8 @@ def run_evaluation(request, project_id):
     4. Store the run result
     """
     project = get_object_or_404(Project, pk=project_id)
+    from common.acl import assert_project_access
+    assert_project_access(project_id, str(request.user.id))
     top_k = request.data.get('top_k', 10)
 
     cases = EvaluationCase.objects.filter(project=project)
@@ -162,6 +169,8 @@ def run_evaluation(request, project_id):
 @api_view(['GET'])
 def list_runs(request, project_id, case_id):
     """List evaluation runs for a specific case."""
+    from common.acl import assert_project_access
+    assert_project_access(project_id, str(request.user.id))
     case = get_object_or_404(EvaluationCase, pk=case_id, project_id=project_id)
     runs = EvaluationRun.objects.filter(evaluation_case=case)
     serializer = EvaluationRunSerializer(runs, many=True)
@@ -171,6 +180,8 @@ def list_runs(request, project_id, case_id):
 @api_view(['DELETE'])
 def delete_run(request, project_id, case_id, run_id):
     """Delete an evaluation run."""
+    from common.acl import assert_project_access
+    assert_project_access(project_id, str(request.user.id))
     run = get_object_or_404(
         EvaluationRun,
         pk=run_id,
@@ -192,6 +203,8 @@ def compare_runs(request, project_id):
     Returns deltas for precision, recall, latency, and config differences.
     """
     project = get_object_or_404(Project, pk=project_id)
+    from common.acl import assert_project_access
+    assert_project_access(project_id, str(request.user.id))
 
     run_a_id = request.query_params.get('run_a')
     run_b_id = request.query_params.get('run_b')

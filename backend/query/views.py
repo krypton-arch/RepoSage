@@ -16,6 +16,8 @@ from ingestion.models import DocumentChunk
 def ask_question(request, project_id):
     """Ask a question about a project's codebase. Returns grounded answer with citations."""
     project = get_object_or_404(Project, pk=project_id)
+    from common.acl import assert_project_access
+    assert_project_access(project_id, str(request.user.id))
 
     serializer = QueryInputSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
@@ -108,6 +110,8 @@ def ask_question(request, project_id):
 def list_queries(request, project_id):
     """List past queries for a project."""
     project = get_object_or_404(Project, pk=project_id)
+    from common.acl import assert_project_access
+    assert_project_access(project_id, str(request.user.id))
     sessions = QuerySession.objects.filter(project=project)
     serializer = QuerySessionListSerializer(sessions, many=True)
     return Response(serializer.data)

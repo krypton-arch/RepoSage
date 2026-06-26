@@ -21,6 +21,8 @@ from ingestion.services.pipeline import run_ingestion
 def upload_files(request, project_id):
     """Upload one or more files to a project."""
     project = get_object_or_404(Project, pk=project_id)
+    from common.acl import assert_project_access
+    assert_project_access(project_id, str(request.user.id))
     files = request.FILES.getlist('files')
 
     if not files:
@@ -49,6 +51,8 @@ def upload_files(request, project_id):
 def upload_zip(request, project_id):
     """Upload a zip archive to a project."""
     project = get_object_or_404(Project, pk=project_id)
+    from common.acl import assert_project_access
+    assert_project_access(project_id, str(request.user.id))
 
     if 'file' not in request.FILES:
         return Response(
@@ -83,6 +87,8 @@ def trigger_ingestion(request, project_id):
                        Required when resume=true.
     """
     project = get_object_or_404(Project, pk=project_id)
+    from common.acl import assert_project_access
+    assert_project_access(project_id, str(request.user.id))
 
     resume = request.data.get('resume', False)
     job_id = request.data.get('job_id', None)
@@ -131,6 +137,8 @@ def trigger_ingestion(request, project_id):
 def list_jobs(request, project_id):
     """List ingestion jobs for a project."""
     project = get_object_or_404(Project, pk=project_id)
+    from common.acl import assert_project_access
+    assert_project_access(project_id, str(request.user.id))
     jobs = IngestionJob.objects.filter(project=project)
     serializer = IngestionJobSerializer(jobs, many=True)
     return Response(serializer.data)
@@ -139,6 +147,8 @@ def list_jobs(request, project_id):
 @api_view(['GET'])
 def get_job(request, project_id, job_id):
     """Get a specific ingestion job."""
+    from common.acl import assert_project_access
+    assert_project_access(project_id, str(request.user.id))
     job = get_object_or_404(IngestionJob, pk=job_id, project_id=project_id)
     serializer = IngestionJobSerializer(job)
     return Response(serializer.data)
@@ -148,6 +158,8 @@ def get_job(request, project_id, job_id):
 def list_documents(request, project_id):
     """List all indexed documents for a project."""
     project = get_object_or_404(Project, pk=project_id)
+    from common.acl import assert_project_access
+    assert_project_access(project_id, str(request.user.id))
     documents = SourceDocument.objects.filter(project=project)
     serializer = SourceDocumentSerializer(documents, many=True)
     return Response(serializer.data)
@@ -156,6 +168,8 @@ def list_documents(request, project_id):
 @api_view(['GET'])
 def list_document_chunks(request, project_id, doc_id):
     """List chunks for a specific document."""
+    from common.acl import assert_project_access
+    assert_project_access(project_id, str(request.user.id))
     doc = get_object_or_404(SourceDocument, pk=doc_id, project_id=project_id)
     chunks = DocumentChunk.objects.filter(document=doc)
     serializer = DocumentChunkSerializer(chunks, many=True)
